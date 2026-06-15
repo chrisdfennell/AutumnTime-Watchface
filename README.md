@@ -1,60 +1,114 @@
-# Autumn Watch Face
+<div align="center">
 
-A premium, golden-hour fall-foliage themed **digital watch face** for the **Garmin Fenix 8 and tactix 8**, written in Monkey C for Connect IQ.
+<img src="assets/hero_image.png" alt="Autumn watch face" width="100%" />
 
-Autumn brings a warm, crisp, and beautiful fall aesthetic to your watch:
+# 🍂 Autumn Watch Face
 
-- **Living Sky Procedural Backdrop**: A smooth color gradient shifting through dawn purples, crisp midday blue, amber/crimson sunsets, and a starry dusky-purple night based on the current hour.
-- **Arcing Celestial Objects**: A glowing harvest sun (with rotating rays and procedural bloom) and a pale crescent moon rise and set along a circular path according to the clock.
-- **Drifting Clouds & Rolling Hills**: Muted clouds drift across the sky, and overlapping hill layers (olive and burnt sienna) roll gently along the bottom in active mode.
-- **Swaying Autumn Grove**: A small grove of deciduous trees with fiery red/orange/gold canopies sways in the breeze above a leaf-litter forest floor.
-- **Falling Maple Leaves**: Leaves spill out of each tree's canopy and flutter down to the ground — they only ever fall from the trees, never from empty sky.
-- **Maple Leaf Seconds**: A black-outlined maple leaf second indicator orbits the outer perimeter, staying legible even as it passes over the forest floor.
-- **Centered Digital Time**: Large, clean, rounded clock numerals (Arial Rounded MT Bold) centered with high-contrast black outlining.
-- **Centered Date & Weather**: An elegant date line (Segoe UI Light) showing the calendar date and dynamic weather temperature (with automatic Celsius/Fahrenheit unit conversion).
-- **Symmetrical Complications Layout**:
-  - **Left complication**: A maple-orange heart icon + numeric Body Battery percentage.
-  - **Right complication**: A golden-amber water droplet icon + numeric Device Battery percentage.
-  - **Bottom complication**: A steps progress bar (harvest-gold / burnt-orange) + steps numeric count.
-- **High-Contrast Text Outlines**: All text elements (clock, date, and metrics) are drawn with a custom black outline to ensure legibility against any dynamic gradient or scenery background.
+**A premium, golden-hour fall-foliage digital watch face for the Garmin Fenix 8 & tactix 8.**
 
-## Hardware / scaling
+Written in [Monkey C](https://developer.garmin.com/connect-iq/monkey-c/) for Connect IQ.
 
-The project targets the Fenix 8 and tactix 8 platforms. Connect IQ has no dedicated `tactix8` product id, so the project targets the Fenix 8 AMOLED and Solar products:
+[![License: MIT](https://img.shields.io/badge/License-MIT-D4622A.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Garmin%20Connect%20IQ-FFB347.svg)](https://developer.garmin.com/connect-iq/)
+[![Devices](https://img.shields.io/badge/Fenix%208%20%7C%20tactix%208-AMOLED%20%2B%20Solar-B23A1E.svg)](#-hardware--scaling)
+[![Min API](https://img.shields.io/badge/Connect%20IQ-4.0.0%2B-E0A828.svg)](manifest.xml)
 
-| Product id      | Resolution | Case            | Panel Type |
-|-----------------|------------|-----------------|------------|
-| `fenix847mm`    | 454×454    | tactix 8 51mm   | AMOLED     |
-| `fenix843mm`    | 416×416    | tactix 8 47mm   | AMOLED     |
-| `fenix8pro47mm` | 454×454    | Fenix 8 Pro     | AMOLED     |
-| `fenix8solar51mm` / `fenix8solar47mm` | 280/260 | Fenix 8 Solar | MIP (Solar) |
+</div>
+
+---
+
+<table>
+<tr>
+<td width="55%" valign="top">
+
+Autumn brings a warm, crisp fall aesthetic to your wrist. Everything is drawn
+**procedurally** — a living sky that tracks the time of day, a swaying grove of
+maple trees, and leaves that flutter down out of the canopies — all scaled
+relative to the screen so it looks right on every supported case size.
+
+- 🌅 **Living sky** — dawn purples → crisp midday blue → amber/crimson sunset → starry dusky-purple night
+- ☀️ **Arcing sun & moon** — a glowing harvest sun and a pale crescent moon orbit with the clock
+- 🌳 **Swaying grove** — deciduous trees with fiery red/orange/gold canopies over a leaf-litter floor
+- 🍁 **Falling leaves** — maple leaves spill from each canopy (never from empty sky)
+- ⏱️ **Maple-leaf seconds** — a black-outlined leaf orbits the rim, legible even over the ground
+- 🕒 **Big outlined time & date** — high-contrast clock, date, and live weather temperature
+
+</td>
+<td width="45%" valign="top" align="center">
+
+<img src="assets/screen_active.png" alt="Autumn on a 454×454 AMOLED panel" width="300" />
+
+<sub><i>Live render on a 454×454 AMOLED panel</i></sub>
+
+</td>
+</tr>
+</table>
+
+---
+
+## ✨ Features
+
+| | |
+|---|---|
+| **Living Sky Gradient** | A procedural backdrop that smoothly shifts color by the hour — dawn purples, crisp midday blue, sunset marigold/crimson, and a starry deep night. |
+| **Arcing Celestial Objects** | A glowing harvest sun (rotating rays + procedural bloom) and a pale crescent moon rise and set along a circular path. |
+| **Drifting Clouds & Rolling Hills** | Muted clouds drift overhead; overlapping olive & burnt-sienna hill layers roll gently along the bottom in active mode. |
+| **Swaying Autumn Grove** | A small grove of deciduous trees with fiery canopies sways in the breeze above a leaf-litter forest floor. |
+| **Falling Maple Leaves** | Leaves spill out of each tree's canopy and flutter to the ground — they only ever fall from the trees. |
+| **Maple Leaf Seconds** | A black-outlined maple-leaf second indicator orbits the perimeter, staying legible over the scenery. |
+| **Symmetrical Complications** | ❤️ maple-orange Body Battery · 💧 golden-amber device battery · 📊 harvest-gold steps bar with live count. |
+| **High-Contrast Outlines** | Every text element is drawn with a custom black outline for readability against any dynamic background. |
+
+---
+
+## 📐 Hardware & scaling
+
+The project targets the Fenix 8 and tactix 8 platforms. Connect IQ has no dedicated `tactix8` product id, so it targets the Fenix 8 AMOLED and Solar products that share the same hardware:
+
+| Product id | Resolution | Case | Panel |
+|---|---|---|---|
+| `fenix847mm` | 454×454 | tactix 8 51mm | AMOLED |
+| `fenix843mm` | 416×416 | tactix 8 47mm | AMOLED |
+| `fenix8pro47mm` | 454×454 | Fenix 8 Pro | AMOLED |
+| `fenix8solar51mm` / `fenix8solar47mm` | 280 / 260 | Fenix 8 Solar | MIP (Solar) |
+| `fr965` | 454×454 | Forerunner 965 | AMOLED |
 
 Everything is laid out in percentages of `dc.getWidth()/getHeight()` and the screen center, so it scales cleanly across all of these resolutions.
 
-## Always-on display
+---
+
+## 🔋 Always-on display
 
 The face has two render paths sharing one `onUpdate()`:
 
 - **Active mode** — full brightness, animations (rolling hills, swaying grove, falling leaves, sun rotation, drifting clouds), sky gradients, and text outlines.
-- **Always-on / low-power** (`mIsSleep`) — burn-in-safe: dim grey time/date, thin outline representations of the battery metrics, steps progress outline, and **no visual fills or background animations**. All lit pixels are shifted a few pixels each minute (`requiresBurnInProtection`). `onPartialUpdate()` only repaints when the minute changes, staying well inside the always-on power budget.
+- **Always-on / low-power** (`mIsSleep`) — burn-in-safe: dim grey time/date, thin outline representations of the battery metrics, steps progress outline, and **no visual fills or background animations**. All lit pixels shift a few pixels each minute (`requiresBurnInProtection`). `onPartialUpdate()` only repaints when the minute changes, staying well inside the always-on power budget.
 
-## Data sources
+---
 
-- **Steps + goal:** `ActivityMonitor.getInfo()` (`steps`, `stepGoal`).
-- **Device battery:** `System.getSystemStats().battery`.
-- **Body Battery:** `SensorHistory.getBodyBatteryHistory()`. Fails gracefully if the value is unavailable.
-- **Weather:** `Weather.getCurrentConditions()` (uses Connect IQ weather APIs to display current temperature in Celsius or Fahrenheit depending on device settings).
+## 📡 Data sources
 
-## Settings
+| Data | API |
+|---|---|
+| Steps + goal | `ActivityMonitor.getInfo()` (`steps`, `stepGoal`) |
+| Device battery | `System.getSystemStats().battery` |
+| Body Battery | `SensorHistory.getBodyBatteryHistory()` — degrades gracefully if unavailable |
+| Weather | `Weather.getCurrentConditions()` — °C/°F per device settings |
+
+---
+
+## ⚙️ Settings
 
 Editable in Garmin Connect / the simulator's App Settings:
 
 - **Show Date** — toggle the date and weather line.
 - **Step Goal Override** — steps for a full harvest bar; `0` uses the watch's own step goal.
 
-## Build & run
+---
 
-Prerequisites: the **Connect IQ SDK** and a JDK. Paths live in `build_config.json` (auto-created on first run) — edit them to match your machine:
+## 🛠️ Build & run
+
+> **Prerequisites:** the [Connect IQ SDK](https://developer.garmin.com/connect-iq/sdk/) and a JDK. Paths live in `build_config.json` (auto-created on first run) — edit them to match your machine:
 
 ```json
 {
@@ -63,7 +117,7 @@ Prerequisites: the **Connect IQ SDK** and a JDK. Paths live in `build_config.jso
 }
 ```
 
-### Build (default device = `fenix847mm`, 454×454)
+**Build** (default device = `fenix847mm`, 454×454):
 
 ```powershell
 ./build.ps1                     # build .prg
@@ -71,19 +125,19 @@ Prerequisites: the **Connect IQ SDK** and a JDK. Paths live in `build_config.jso
 ./build.ps1 -Export             # package a store-ready .iq
 ```
 
-### Build + launch in the simulator
+**Build + launch in the simulator:**
 
 ```powershell
 ./build.ps1 -Run                # or double-click run_simulator.bat
 ```
 
-In the simulator you can exercise the design via the menus:
-- **Settings → Battery** to move the device-battery complication.
-- **Simulation → Body Battery** for the Body Battery percentage.
-- **Simulation → Time / Sleep** (Always On) to preview the low-power render path.
-- **Simulation → Set Time** to test different hour transitions (dawn, midday, sunset, and night).
+In the simulator, exercise the design via the menus:
+- **Settings → Battery** — move the device-battery complication.
+- **Simulation → Body Battery** — set the Body Battery percentage.
+- **Simulation → Time / Sleep** (Always On) — preview the low-power render path.
+- **Simulation → Set Time** — test hour transitions (dawn, midday, sunset, night).
 
-### Sideload to the watch
+**Sideload to the watch:**
 
 1. Build the `.prg` (or `.iq`).
 2. Connect the watch by USB; it mounts as a drive.
@@ -92,14 +146,16 @@ In the simulator you can exercise the design via the menus:
 
 For store distribution, upload the `.iq` from `./build.ps1 -Export`.
 
-## Fonts & Typography
+---
+
+## 🔤 Fonts & typography
 
 The face renders using custom rasterized bitmap fonts:
 
-- **Time font**: *Arial Rounded MT Bold* (`exocet_time.fnt`/`.png`).
-- **Date / Metrics font**: *Segoe UI Light* (`exocet_label.fnt`/`.png`).
+- **Time** — *Arial Rounded MT Bold* (`exocet_time.fnt`/`.png`)
+- **Date / metrics** — *Segoe UI Light* (`exocet_label.fnt`/`.png`)
 
-The bitmap font pipeline is:
+The bitmap-font pipeline:
 
 ```
 fonts-src/RoundedTime.ttf  ──┐
@@ -107,11 +163,34 @@ fonts-src/SegoeUILight.ttf ──┤  python tools/gen_fonts.py
                              └─▶  resources/fonts/exocet_*.fnt + .png
 ```
 
-- `tools/gen_fonts.py` rasterizes the glyphs we use (digits, symbols like `:` and `%`, and standard letters) into alpha atlases so `dc.setColor()` tints them. Re-run it if you need to modify font sizes or support new characters.
+- `tools/gen_fonts.py` rasterizes the glyphs we use (digits, `:`, `%`, letters) into alpha atlases so `dc.setColor()` tints them. Re-run it to change sizes or add characters.
 - `resources/fonts/fonts.xml` declares `ExocetTime` / `ExocetValue` / `ExocetLabel`.
 - `initFonts()` loads them, falling back to vector fonts then built-ins if missing.
 
-## Customizing
+---
 
-- **Colors / palettes**: hill, tree, cloud, leaf, and sky gradient palettes are constants and function calculations inside `AutumnView.mc`.
-- **Layout anchors**: all coordinate scales are relative percentage values in `onUpdate()`.
+## 🎨 Assets & customizing
+
+- **Marketing art** (`assets/`) is generated by `tools/gen_assets.py`, which composites the latest `assets/screen_active.png` onto fall-toned backdrops — re-run it after recapturing a screenshot.
+- **Colors / palettes** — hill, tree, cloud, leaf, and sky-gradient palettes are the `C_*` constants and functions inside `source/AutumnView.mc`.
+- **Layout anchors** — all coordinate scales are relative percentage values in `onUpdate()`.
+
+<div align="center">
+
+| App icon | Cover |
+|:---:|:---:|
+| <img src="assets/app_icon_24bit.png" width="96" /> | <img src="assets/cover_image.png" width="220" /> |
+
+</div>
+
+---
+
+## 🤝 Contributing
+
+Contributions of all kinds are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, coding guidelines, and the PR process. By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## 📄 License
+
+Released under the [MIT License](LICENSE). © 2026 Christopher Fennell.
+
+<div align="center"><sub>🍂 Equip Autumn, and take a moment in the crisp fall air.</sub></div>
