@@ -1,0 +1,38 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dusky autumn backdrop -->
+  <rect width="48" height="48" rx="8" fill="#0A0710"/>
+  <circle cx="24" cy="24" r="21" stroke="#3A2410" stroke-width="1.5" opacity="0.8"/>
+
+  <defs>
+    <!-- Harvest sun glow -->
+    <radialGradient id="sun" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#FFE0A0"/>
+      <stop offset="55%" stop-color="#FFB347"/>
+      <stop offset="100%" stop-color="#9A5A1E"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Setting harvest sun -->
+  <circle cx="24" cy="20" r="7" fill="url(#sun)"/>
+
+  <!-- Rolling autumn hills -->
+  <path d="M3 34 Q14 27 24 32 Q34 37 45 31 L45 45 L3 45 Z" fill="#7A3F1E"/>
+  <path d="M3 38 Q16 33 26 37 Q36 41 45 36 L45 45 L3 45 Z" fill="#5C3416"/>
+
+  <!-- Falling maple leaves -->
+  <g>
+    <polygon points="13,12 16,16 14,21 12,21 10,16" fill="#E0651E"/>
+    <line x1="13" y1="19" x2="13" y2="23" stroke="#5A3A1E" stroke-width="0.8"/>
+  </g>
+  <g>
+    <polygon points="36,14 38.5,17 37,21 35,21 33.5,17" fill="#E0A828"/>
+    <line x1="36" y1="20" x2="36" y2="24" stroke="#5A3A1E" stroke-width="0.8"/>
+  </g>
+  <g>
+    <polygon points="30,9 32,11.5 31,15 29,15 28,11.5" fill="#C8501E"/>
+  </g>
+
+  <!-- Harvest bar at the bottom -->
+  <rect x="14" y="41" width="20" height="2.5" rx="1.25" fill="#2A1C0E"/>
+  <rect x="14" y="41" width="13" height="2.5" rx="1.25" fill="#FFC043"/>
+</svg>
