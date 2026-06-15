@@ -160,9 +160,10 @@ class AutumnView extends WatchUi.WatchFace {
 
         // Time values
         var clockTime = System.getClockTime();
-        var hour = clockTime.hour;
-        var min = clockTime.min;
-        var secVal = clockTime.sec;
+        var hour = 17;
+        var min = 35;
+        var secVal = 18;
+
 
         if (!mLowPower) {
             // --- ACTIVE VISUAL LAYER ---
@@ -318,9 +319,10 @@ class AutumnView extends WatchUi.WatchFace {
         var rightX   = (w * 0.78).toNumber() + dx;
 
         // Left Complication: Body Battery (Maple Heart)
-        var bodyBattery = getBodyBattery();
-        var bodyAvail = (bodyBattery != null);
-        var bodyVal = bodyAvail ? bodyBattery : 0;
+        var bodyBattery = 85;
+        var bodyAvail = true;
+        var bodyVal = bodyBattery;
+
         if (bodyAvail) {
             var valStr = bodyVal.format("%d") + "%";
             var color = mLowPower ? 0x6E6E6E : 0xFFFFFF;
@@ -340,7 +342,7 @@ class AutumnView extends WatchUi.WatchFace {
 
         // Right Complication: Device Battery (Amber Droplet)
         var stats = System.getSystemStats();
-        var battery = (stats.battery != null) ? stats.battery.toNumber() : 0;
+        var battery = 78;
 
         var valStr = battery.format("%d") + "%";
         var color = mLowPower ? 0x6E6E6E : 0xFFFFFF;
@@ -361,12 +363,11 @@ class AutumnView extends WatchUi.WatchFace {
         var barW = (w * 0.38).toNumber();
         var barH = 8;
         var barY = (h * 0.91).toNumber() + dy;
-        var stepsFraction = getStepFraction();
+        var stepsFraction = 0.642;
         drawXpBar(dc, cx, barY, barW, barH, stepsFraction);
 
         if (!burnIn) {
-            var actInfo = ActivityMonitor.getInfo();
-            var steps = (actInfo != null && actInfo.steps != null) ? actInfo.steps : 0;
+            var steps = 6420;
             var stepsStr = steps.format("%d") + " STEPS";
             drawTextWithOutline(dc, cx, barY - 14, mFontLabel, stepsStr, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER, 0xFFFFFF);
         }
