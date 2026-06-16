@@ -30,6 +30,8 @@ relative to the screen so it looks right on every supported case size.
 - ☀️ **Arcing sun & moon** — a glowing harvest sun and a pale crescent moon orbit along the true day arc
 - 🌳 **Swaying grove** — deciduous trees with fiery red/orange/gold canopies over a leaf-litter floor
 - 🍁 **Falling leaves** — maple leaves spill from each canopy (never from empty sky)
+- 🦊 **Woodland critters** — now and then a squirrel, fox, hedgehog, skein of geese, owl, or bat crosses the scene
+- 🎃 **Holiday themes** — optional Halloween (glowing jack-o'-lantern + black cat & ghost) and Thanksgiving (harvest pumpkins + a turkey) toggles
 - ⏱️ **Maple-leaf seconds** — a black-outlined leaf orbits the rim *on top of everything*, always legible
 - ❤️ **Configurable complications** — pick Heart Rate, Body Battery, Device Battery, Steps, or Calories for each bottom slot
 - 🕒 **Big outlined time & date** — high-contrast clock, date, and live weather temperature
@@ -56,6 +58,8 @@ relative to the screen so it looks right on every supported case size.
 | **Drifting Clouds & Rolling Hills** | Muted clouds drift overhead; overlapping olive & burnt-sienna hill layers roll gently along the bottom in active mode. |
 | **Swaying Autumn Grove** | A small grove of deciduous trees with fiery canopies sways in the breeze above a leaf-litter forest floor. |
 | **Falling Maple Leaves** | Leaves spill out of each tree's canopy and flutter to the ground — they only ever fall from the trees. |
+| **Woodland Critters** | Once in a while a little visitor crosses the scene — a **squirrel** scampering or a **fox** trotting along the forest floor, a **hedgehog** trundling past, a small **skein of geese** migrating overhead, or, at night, an **owl** gliding or a **bat** fluttering by. Deterministic from the clock (at most one at a time, with quiet stretches between), and toggleable in settings. |
+| **Holiday Themes** | Two optional, off-by-default toggles. **Halloween** adds a glowing carved jack-o'-lantern on the leaf litter and slips a **black cat** and a **ghost** into the visitor rotation (the bats already fit). **Thanksgiving** adds a harvest patch of pumpkins & gourds and lets a fan-tailed **turkey** strut across. Enable either, both, or neither. |
 | **Maple Leaf Seconds** | A black-outlined maple-leaf second indicator orbits the perimeter, drawn last so it stays legible on top of the time, date, and complications. |
 | **Real Sunrise/Sunset** | The sun, day/night swap, stars, and sky gradient track the actual sunrise/sunset for your location and date (NOAA almanac formula), with a fixed autumn-schedule fallback when there's no location fix. |
 | **Configurable Complications** | Each bottom slot is set in app settings — ❤️ Heart Rate, ⚡ Body Battery, 🔋 Device Battery, 👣 Steps, 🔥 Calories, or Off — and draws a matching warm-toned icon. Defaults: left = Heart Rate, right = Device Battery. Plus a 📊 harvest-gold steps bar with live count. |
@@ -96,7 +100,7 @@ Everything is laid out in percentages of `dc.getWidth()/getHeight()` and the scr
 
 The face has two render paths sharing one `onUpdate()`:
 
-- **Active mode** — full brightness, animations (rolling hills, swaying grove, falling leaves, sun rotation, drifting clouds), sky gradients, and text outlines.
+- **Active mode** — full brightness, animations (rolling hills, swaying grove, falling leaves, crossing critters, sun rotation, drifting clouds), sky gradients, and text outlines. Render detail auto-tunes to the device's frame budget so the scene keeps animating on slower panels.
 - **Always-on / low-power** (`mIsSleep`) — burn-in-safe: dim grey time/date, thin outline representations of the battery metrics, steps progress outline, and **no visual fills or background animations**. All lit pixels shift a few pixels each minute (`requiresBurnInProtection`). `onPartialUpdate()` only repaints when the minute changes, staying well inside the always-on power budget.
 
 ---
@@ -123,6 +127,9 @@ Editable in Garmin Connect / the simulator's App Settings:
 - **Step Goal Override** — steps for a full harvest bar; `0` uses the watch's own step goal.
 - **Bottom-Left Complication** — Heart Rate, Body Battery, Device Battery, Steps, Calories, or Off (default: Heart Rate).
 - **Bottom-Right Complication** — same options (default: Device Battery).
+- **Show Woodland Critters** — toggle the crossing visitors (squirrel, fox, hedgehog, geese, owl, bat). On by default.
+- **Halloween Theme** — glowing jack-o'-lantern + black cat & ghost visitors. Off by default.
+- **Thanksgiving Theme** — harvest pumpkins & gourds + a strutting turkey. Off by default.
 
 ---
 

@@ -4,6 +4,25 @@ All notable changes to Autumn are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-06-16
+
+### Added
+- **Woodland critters**: Now and then a single little visitor crosses the scene — a squirrel, fox, or hedgehog along the forest floor, a small skein of migrating geese overhead, or an owl or bat after dark. Selection is deterministic from the clock (at most one at a time, with quiet stretches between), and a new **Show Woodland Critters** setting toggles them (on by default).
+- **Halloween theme** (`ShowHalloween`, off by default): adds a glowing carved jack-o'-lantern that flickers on the leaf litter, and slips a black cat (ground) and a ghost (sky) into the visitor rotation.
+- **Thanksgiving theme** (`ShowThanksgiving`, off by default): adds a harvest patch of pumpkins and a gourd on the leaf litter, and lets a fan-tailed turkey strut across the forest floor. The two holiday toggles are independent — enable either, both, or neither.
+- **Adaptive render quality**: `onUpdate` times itself and nudges a detail level (text-outline passes, grove segments, sun rays) up/down with hysteresis, so the scene keeps fully animating on slower panels instead of the OS throttling per-second updates.
+- **Cached AMOLED sky gradient**: the per-row gradient fill is rendered into a buffered bitmap and blitted, re-rendering only when the colors change (~once a minute).
+
+### Changed
+- **Cheaper always-on path**: `onPartialUpdate` no longer re-renders the whole screen each minute. On AMOLED always-on it clips to the central time/date band and repaints just that region (staying well inside the partial-update power budget); MIP keeps the full-scene minute refresh.
+- **Maple-leaf seconds** now hide cleanly in low power (gated on sleep state) instead of sitting frozen, so the marker no longer appears stuck on MIP devices.
+
+### Fixed
+- Resolved reports of the face "freezing" / the seconds marker stalling, caused by the always-on path exceeding the execution-time budget.
+- Hardened the sunrise/sunset angle normalizers against non-finite math (bounded modulo instead of unbounded `while` loops that could hang).
+- Corrected the negative-modulo cloud wrap so a drifting cloud no longer jumps off-screen.
+- Eliminated per-frame heap churn and duplicate per-frame syscalls (hoisted constant arrays, reused the hill polygon buffer, cached device settings / clock / activity info), throttled not-yet-valid sunrise/sunset retries, and skipped the weather lookup in always-on.
+
 ## [1.2.0] - 2026-06-15
 
 ### Added

@@ -9,4 +9,13 @@
          4=Steps 5=Calories. Defaults: left=Heart Rate, right=Device Battery. -->
     <property id="LeftComplication" type="number">1</property>
     <property id="RightComplication" type="number">3</property>
+
+    <!-- Show the little woodland visitors that cross the scene now and then -->
+    <property id="ShowCritters" type="boolean">true</property>
+
+    <!-- Seasonal-holiday themes (off by default): a glowing jack-o'-lantern +
+         spooky visitors for Halloween, a harvest pumpkin patch + a turkey for
+         Thanksgiving. -->
+    <property id="ShowHalloween" type="boolean">false</property>
+    <property id="ShowThanksgiving" type="boolean">false</property>
 </properties>

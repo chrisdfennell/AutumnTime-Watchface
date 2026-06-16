@@ -32,4 +32,19 @@
             <listEntry value="5">@Strings.CompCalories</listEntry>
         </settingConfig>
     </setting>
+
+    <!-- Toggle the crossing woodland critters -->
+    <setting propertyKey="@Properties.ShowCritters" title="@Strings.ShowCrittersTitle" prompt="@Strings.ShowCrittersPrompt">
+        <settingConfig type="boolean" />
+    </setting>
+
+    <!-- Toggle the Halloween theme (jack-o'-lantern + spooky visitors) -->
+    <setting propertyKey="@Properties.ShowHalloween" title="@Strings.ShowHalloweenTitle" prompt="@Strings.ShowHalloweenPrompt">
+        <settingConfig type="boolean" />
+    </setting>
+
+    <!-- Toggle the Thanksgiving theme (harvest pumpkins + a turkey) -->
+    <setting propertyKey="@Properties.ShowThanksgiving" title="@Strings.ShowThanksgivingTitle" prompt="@Strings.ShowThanksgivingPrompt">
+        <settingConfig type="boolean" />
+    </setting>
 </settings>

@@ -8,6 +8,15 @@
     <string id="StepGoalTitle">Step Goal Override</string>
     <string id="StepGoalPrompt">Steps for a full harvest bar. Set 0 to use the watch's own daily step goal.</string>
 
+    <string id="ShowCrittersTitle">Show Woodland Critters</string>
+    <string id="ShowCrittersPrompt">Let a squirrel, fox, hedgehog, skein of geese, owl, or bat cross the scene now and then.</string>
+
+    <string id="ShowHalloweenTitle">Halloween Theme</string>
+    <string id="ShowHalloweenPrompt">Add a glowing carved jack-o'-lantern and let a black cat or ghost join the visitors.</string>
+
+    <string id="ShowThanksgivingTitle">Thanksgiving Theme</string>
+    <string id="ShowThanksgivingPrompt">Add a harvest patch of pumpkins and gourds, and let a turkey strut across.</string>
+
     <!-- Complication pickers -->
     <string id="LeftCompTitle">Bottom-Left Complication</string>
     <string id="RightCompTitle">Bottom-Right Complication</string>

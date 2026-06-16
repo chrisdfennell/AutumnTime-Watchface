@@ -20,7 +20,7 @@ import Toybox.Weather;
 //   - Right:   configurable complication (default device battery)
 //   - Bottom:  steps progress bar, styled as a harvest gold bar
 //   - Background: living autumn sky gradient, arcing sun/moon, drifting clouds,
-//                 rolling hills, a leaf-litter forest floor, a swaying autumn tree,
+//                 rolling hills, a leaf-litter forest floor, a swaying autumn grove,
 //                 and maple leaves drifting + orbiting as the seconds hand
 //
 // The two bottom complications are chosen in the app settings (heart rate, Body
@@ -28,7 +28,9 @@ import Toybox.Weather;
 // The sun, day/night, and sky track the REAL sunrise/sunset computed from the
 // watch's location and today's date, falling back to a fixed autumn schedule when
 // no location fix is available. The maple-leaf seconds marker is drawn last (on
-// top of everything) with a black outline so it stays legible.
+// top of everything) with a black outline so it stays legible. Once in a while a
+// little woodland visitor (squirrel, fox, hedgehog, a skein of geese, an owl, or
+// a bat) crosses the scene.
 //
 // Everything scales cleanly relative to the screen dimensions (dc.getWidth()/getHeight()).
 //
@@ -54,11 +56,26 @@ class AutumnView extends WatchUi.WatchFace {
     private const COMP_STEPS    = 4;  // step count
     private const COMP_CALORIES = 5;  // calories (kcal)
 
+    // --- Critter ids (the little woodland visitors that cross the scene) ---
+    private const CR_SQUIRREL = 0;  // ground (day) - scampers across the forest floor
+    private const CR_FOX      = 1;  // ground (day or night) - trots across
+    private const CR_HEDGEHOG = 2;  // ground (day or night) - trundles along, foraging
+    private const CR_GEESE    = 3;  // sky (day) - a small migrating V crosses overhead
+    private const CR_OWL      = 4;  // sky (night) - glides silently across
+    private const CR_BAT      = 5;  // sky (night) - flutters across
+    // Seasonal-holiday critters (only join the rotation when their mode is on).
+    private const CR_BLACKCAT = 6;  // Halloween, ground - arched back, glowing eyes
+    private const CR_GHOST    = 7;  // Halloween, sky - a floaty sheet ghost
+    private const CR_TURKEY   = 8;  // Thanksgiving, ground - struts with a fanned tail
+
     // --- Settings (see resources/settings) ---
     private var mShowDate as Boolean = true;
     private var mStepGoalOverride as Number = 0;  // 0 => use device step goal
     private var mLeftComp as Number = COMP_HR;       // bottom-left complication
     private var mRightComp as Number = COMP_BATTERY; // bottom-right complication
+    private var mShowCritters as Boolean = true;     // the crossing woodland visitors
+    private var mShowHalloween as Boolean = false;   // jack-o'-lantern + spooky visitors
+    private var mShowThanksgiving as Boolean = false; // harvest pumpkins + a turkey
 
     // --- Heart-rate cache (sensor read throttled to once every ~10s) ---
     private var mCachedHr as Number or Null = null;
@@ -69,6 +86,10 @@ class AutumnView extends WatchUi.WatchFace {
     private var mSunValid as Boolean = false;  // true once a real location fix was used
     private var mSunrise as Float = 6.5;       // local hours; defaults = fixed autumn schedule
     private var mSunset as Float = 18.5;
+    private var mSunLastTry as Number = -10000; // epoch sec of last (not-yet-valid) sun retry
+
+    // --- Per-frame cache of device settings (read once per redraw) ---
+    private var mSettings as System.DeviceSettings or Null = null;
 
     // --- Fonts (vector fonts with safe fallbacks) ---
     private var mFontTime as Graphics.FontType or Null = null;
@@ -98,6 +119,59 @@ class AutumnView extends WatchUi.WatchFace {
 
     private const BG_COLOR = 0x000000;        // pitch black for AMOLED contrast/battery
 
+    // --- Hoisted constants (avoid re-allocating these arrays every frame) ---
+    // Star field positions, expressed against a 454x454 reference and scaled.
+    private const STAR_X = [70, 120, 180, 240, 310, 380, 90, 150, 220, 290, 360, 130, 200, 270, 340, 110, 250, 330] as Array<Number>;
+    private const STAR_Y = [50, 70, 45, 60, 55, 75, 110, 95, 120, 105, 115, 160, 150, 175, 155, 200, 210, 195] as Array<Number>;
+    // Sky gradient keyframe colors (identical for the real-sun and fallback schedules).
+    private const SKY_TOP    = [0x080814, 0x141029, 0x6E4A6A, 0x4E86A8, 0x5AA0C0, 0xB0743C, 0x9A3A28, 0x241834, 0x080814] as Array<Number>;
+    private const SKY_BOTTOM = [0x10101F, 0x33243F, 0xFF955A, 0xE8C486, 0xCDE0DC, 0xFFB347, 0xFFC95A, 0x4A2C48, 0x10101F] as Array<Number>;
+    // Fixed-autumn fallback keyframe hours, used when no real sun fix is available.
+    private const SKY_HOURS_FALLBACK = [0.0, 5.0, 6.5, 9.0, 14.0, 17.0, 18.5, 20.5, 24.0] as Array<Float>;
+
+    // Forest layout: base X (fraction of width) + canopy scale. Two large trees
+    // frame the edges; two smaller ones sit further back toward the center.
+    private const FOREST_TXF = [0.86, 0.10, 0.72, 0.27] as Array<Float>;
+    private const FOREST_TSC = [1.00, 0.92, 0.60, 0.64] as Array<Float>;
+    private const LEAF_COLORS = [0xE0651E, 0xE0A828, 0xC8501E, 0xB23A1E, 0xD4621E] as Array<Number>;
+    private const LITTER_COLORS = [0xC8501E, 0xE0A828, 0xB23A1E] as Array<Number>;
+    private const LITTER_X = [60, 150, 250, 350, 410] as Array<Number>;
+    // Canopy foliage blobs: [dxFrac, dyFrac, rFrac, colorIndex].
+    private const CANOPY_COLORS = [0xB23A1E, 0xD4621E, 0xE89A2A, 0xC8501E, 0xE0A828] as Array<Number>;
+    private const CANOPY_BX = [ 0.00, -0.07,  0.07, -0.03,  0.05,  0.00, -0.09,  0.09,  0.03] as Array<Float>;
+    private const CANOPY_BY = [-0.02,  0.01,  0.00, -0.06, -0.05,  0.05, -0.02, -0.03,  0.06] as Array<Float>;
+    private const CANOPY_BR = [ 0.10,  0.085, 0.085, 0.075, 0.08,  0.075, 0.06,  0.06,  0.07] as Array<Float>;
+    private const CANOPY_CI = [ 1,     0,     2,     3,     2,     4,     0,     3,     1] as Array<Number>;
+
+    // Reusable polygon buffer for the rolling hills (filled in place each frame
+    // instead of allocating a new array + point pairs on every redraw).
+    private var mHillPts as Array or Null = null;
+
+    // --- Per-frame caches (read once per redraw to avoid duplicate syscalls) ---
+    private var mClock as System.ClockTime or Null = null;
+    private var mActInfo as ActivityMonitor.Info or Null = null;
+
+    // --- Cached AMOLED sky-gradient buffer ---------------------------------
+    // The gradient colors depend only on hour+minute, so they change at most
+    // once a minute. We render the per-row fill into a buffered bitmap once and
+    // just blit it on subsequent (per-second) frames, re-rendering only when the
+    // colors or dimensions change. Only used on AMOLED (MIP uses a flat fill).
+    private var mSkyBufRef as Graphics.BufferedBitmapReference or Null = null;
+    private var mSkyKeyTop as Number = -1;
+    private var mSkyKeyBottom as Number = -1;
+    private var mSkyKeyW as Number = -1;
+    private var mSkyKeyH as Number = -1;
+
+    // --- Adaptive render quality (auto-tunes to the device's frame budget) ---
+    // onUpdate times itself and nudges mQuality up/down with hysteresis. Expensive
+    // detail (text-outline passes, grove segments, sun rays) scales with it, so a
+    // slow/large panel sheds just enough detail to stay smooth while the whole
+    // scene keeps animating. 3 = full detail, 0 = leanest.
+    private var mQuality as Number = 2;
+    private var mFrameStart as Number = 0;
+    private const Q_SLOW_MS = 220;  // frame slower than this -> drop a level
+    private const Q_FAST_MS = 120;  // frame faster than this -> raise a level
+
     function initialize() {
         WatchFace.initialize();
         loadSettings();
@@ -111,10 +185,16 @@ class AutumnView extends WatchUi.WatchFace {
                 var stepGoal = Application.Properties.getValue("StepGoalOverride");
                 var leftComp = Application.Properties.getValue("LeftComplication");
                 var rightComp = Application.Properties.getValue("RightComplication");
+                var critters = Application.Properties.getValue("ShowCritters");
+                var halloween = Application.Properties.getValue("ShowHalloween");
+                var thanksgiving = Application.Properties.getValue("ShowThanksgiving");
                 if (showDate != null) { mShowDate = showDate; }
                 if (stepGoal != null) { mStepGoalOverride = stepGoal; }
                 if (leftComp != null) { mLeftComp = leftComp; }
                 if (rightComp != null) { mRightComp = rightComp; }
+                if (critters != null) { mShowCritters = critters; }
+                if (halloween != null) { mShowHalloween = halloween; }
+                if (thanksgiving != null) { mShowThanksgiving = thanksgiving; }
             }
         } catch (e) {
             // keep defaults
@@ -166,20 +246,20 @@ class AutumnView extends WatchUi.WatchFace {
 
     // Single render entry point for both active and low-power frames.
     function onUpdate(dc as Dc) as Void {
+        mFrameStart = System.getTimer();  // adaptive-quality frame timer
         var w = mWidth;
         var h = mHeight;
 
-        var burnIn = false;
+        var settings = System.getDeviceSettings();
+        mSettings = settings;  // cache for drawTime / getWeatherString this frame
+        var hasBurnIn = (settings has :requiresBurnInProtection) && settings.requiresBurnInProtection;
+        var burnIn = hasBurnIn && mIsSleep;
         var dx = 0;
         var dy = 0;
-        var settings = System.getDeviceSettings();
-        var hasBurnIn = (settings has :requiresBurnInProtection) && settings.requiresBurnInProtection;
-        if (hasBurnIn && mIsSleep) {
-            burnIn = true;
-            var phase = System.getClockTime().min % 4;
-            if (phase == 1)      { dx = 4;  dy = 2; }
-            else if (phase == 2) { dx = -3; dy = 4; }
-            else if (phase == 3) { dx = 3;  dy = -4; }
+        if (burnIn) {
+            var shift = computeBurnInShift();
+            dx = shift[0];
+            dy = shift[1];
         }
         mLowPower = burnIn;
         mFlatGlobes = !hasBurnIn;
@@ -191,13 +271,13 @@ class AutumnView extends WatchUi.WatchFace {
         dc.setColor(BG_COLOR, BG_COLOR);
         dc.clear();
 
-        // Time values
+        // Time values (cache the clock + activity info once for this redraw)
         var clockTime = System.getClockTime();
+        mClock = clockTime;
+        mActInfo = ActivityMonitor.getInfo();
         var hour = clockTime.hour;
         var min = clockTime.min;
         var secVal = clockTime.sec;
-
-
 
         if (!mLowPower) {
             // --- ACTIVE VISUAL LAYER ---
@@ -217,13 +297,21 @@ class AutumnView extends WatchUi.WatchFace {
                 dc.setColor(cTop, cTop);
                 dc.fillRectangle(0, 0, w, skyH);
             } else {
-                // AMOLED: Draw smooth gradient
-                var step = 4;
-                for (var y = 0; y < skyH; y += step) {
-                    var frac = y.toFloat() / skyH.toFloat();
-                    var c = lerpColor(cTop, cBottom, frac);
-                    dc.setColor(c, Graphics.COLOR_TRANSPARENT);
-                    dc.fillRectangle(0, y, w, step);
+                // AMOLED: smooth gradient, cached in a buffer so the per-row fill
+                // loop runs at most once a minute (when the colors change) rather
+                // than on every per-second redraw.
+                var skyBmp = getSkyBitmap(w, skyH, cTop, cBottom);
+                if (skyBmp != null) {
+                    dc.drawBitmap(0, 0, skyBmp);
+                } else {
+                    // Fallback: render the gradient directly (no buffered bitmap).
+                    var step = 4;
+                    for (var y = 0; y < skyH; y += step) {
+                        var frac = y.toFloat() / skyH.toFloat();
+                        var c = lerpColor(cTop, cBottom, frac);
+                        dc.setColor(c, Graphics.COLOR_TRANSPARENT);
+                        dc.fillRectangle(0, y, w, step);
+                    }
                 }
             }
 
@@ -232,11 +320,9 @@ class AutumnView extends WatchUi.WatchFace {
             // C. Draw Stars at night
             if (isNight) {
                 dc.setColor(0xFFFFFF, Graphics.COLOR_TRANSPARENT);
-                var starX = [70, 120, 180, 240, 310, 380, 90, 150, 220, 290, 360, 130, 200, 270, 340, 110, 250, 330] as Array<Number>;
-                var starY = [50, 70, 45, 60, 55, 75, 110, 95, 120, 105, 115, 160, 150, 175, 155, 200, 210, 195] as Array<Number>;
-                for (var i = 0; i < starX.size(); i++) {
-                    var sx = (starX[i] * w / 454).toNumber();
-                    var sy = (starY[i] * h / 454).toNumber();
+                for (var i = 0; i < STAR_X.size(); i++) {
+                    var sx = (STAR_X[i] * w / 454).toNumber();
+                    var sy = (STAR_Y[i] * h / 454).toNumber();
                     dc.drawPoint(sx, sy);
                 }
             }
@@ -266,18 +352,20 @@ class AutumnView extends WatchUi.WatchFace {
                 if (sunSkyFrac > 1.0) { sunSkyFrac = 1.0; }
                 var sunSkyColor = lerpColor(cTop, cBottom, sunSkyFrac);
 
-                // Rays rotation based on seconds
-                dc.setColor(0xFFB347, Graphics.COLOR_TRANSPARENT);
-                dc.setPenWidth(1);
-                var numRays = 8;
-                var secOffset = secVal.toFloat() * 0.02;
-                for (var i = 0; i < numRays; i++) {
-                    var rayAngle = (i * (2.0 * Math.PI / numRays)) + secOffset;
-                    var rx1 = (sx + (sunR + 2) * Math.cos(rayAngle)).toNumber();
-                    var ry1 = (sy + (sunR + 2) * Math.sin(rayAngle)).toNumber();
-                    var rx2 = (sx + (sunR + 8) * Math.cos(rayAngle)).toNumber();
-                    var ry2 = (sy + (sunR + 8) * Math.sin(rayAngle)).toNumber();
-                    dc.drawLine(rx1, ry1, rx2, ry2);
+                // Rays rotation based on seconds (skipped at low quality)
+                if (mQuality >= 2) {
+                    dc.setColor(0xFFB347, Graphics.COLOR_TRANSPARENT);
+                    dc.setPenWidth(1);
+                    var numRays = 8;
+                    var secOffset = secVal.toFloat() * 0.02;
+                    for (var i = 0; i < numRays; i++) {
+                        var rayAngle = (i * (2.0 * Math.PI / numRays)) + secOffset;
+                        var rx1 = (sx + (sunR + 2) * Math.cos(rayAngle)).toNumber();
+                        var ry1 = (sy + (sunR + 2) * Math.sin(rayAngle)).toNumber();
+                        var rx2 = (sx + (sunR + 8) * Math.cos(rayAngle)).toNumber();
+                        var ry2 = (sy + (sunR + 8) * Math.sin(rayAngle)).toNumber();
+                        dc.drawLine(rx1, ry1, rx2, ry2);
+                    }
                 }
 
                 // Procedural bloom (warm amber harvest sun)
@@ -308,10 +396,21 @@ class AutumnView extends WatchUi.WatchFace {
 
             // E. Draw Drifting Clouds (muted autumn overcast)
             var cloudOffset = (min * 60 + secVal).toFloat();
-            var cx1 = ((w * 0.1 + (cloudOffset * 0.08)).toNumber()) % (w + 80) - 40;
-            var cx2 = ((w * 0.7 - (cloudOffset * 0.05)).toNumber()) % (w + 80) - 40;
+            var span = w + 80;
+            // Positive modulo: Monkey C's % keeps the sign of the dividend, so a
+            // negative drift (cloud 2) would otherwise wrap off-screen.
+            var cx1 = (((((w * 0.1 + (cloudOffset * 0.08)).toNumber()) % span) + span) % span) - 40;
+            var cx2 = (((((w * 0.7 - (cloudOffset * 0.05)).toNumber()) % span) + span) % span) - 40;
             drawCloud(dc, cx1, (h * 0.18).toNumber());
             drawCloud(dc, cx2, (h * 0.26).toNumber());
+
+            // Resolve which little visitor (if any) is crossing right now, so a
+            // flying one can be drawn up in the sky (behind the grove) and a
+            // ground one in front of the forest floor.
+            var crit = mShowCritters ? computeCritter(hour, min, secVal, isNight) : null;
+            if (crit != null && isSkyCritter(crit[0] as Number)) {
+                drawCritter(dc, crit);
+            }
 
             // F. Draw Rolling Autumn Hills (sine-wave polygons)
             var hillPhase1 = secVal.toFloat() * 0.015;
@@ -326,17 +425,31 @@ class AutumnView extends WatchUi.WatchFace {
             dc.setColor(0x6E3A16, Graphics.COLOR_TRANSPARENT);
             dc.fillRectangle(0, floorY, w, h - floorY);
             // A few scattered fallen leaves on the ground
-            var litterColors = [0xC8501E, 0xE0A828, 0xB23A1E] as Array<Number>;
-            var litterX = [60, 150, 250, 350, 410] as Array<Number>;
-            for (var i = 0; i < litterX.size(); i++) {
-                var lx = (litterX[i] * w / 454).toNumber();
+            for (var i = 0; i < LITTER_X.size(); i++) {
+                var lx = (LITTER_X[i] * w / 454).toNumber();
                 var ly = floorY + ((h - floorY) * 0.5).toNumber();
-                drawMapleLeaf(dc, lx, ly, (w * 0.012).toNumber() + 3, litterColors[i % 3], false);
+                drawMapleLeaf(dc, lx, ly, (w * 0.012).toNumber() + 3, LITTER_COLORS[i % 3], false);
             }
 
-            // H. Draw a small grove of swaying autumn trees with leaves
-            //    falling out of each canopy.
+            // H. Draw a small grove of swaying autumn trees with leaves falling
+            //    out of each canopy.
             drawForest(dc, floorY, min, secVal);
+
+            // H.5. Seasonal-holiday decorations rest on the leaf litter, nestled
+            //      by the trees at the bottom corners (opt-in via settings).
+            var decorY = (floorY + (h - floorY) * 0.42).toNumber();
+            if (mShowHalloween) {
+                drawJackOLantern(dc, (w * 0.17).toNumber(), decorY, (w * 0.05).toNumber(), secVal);
+            }
+            if (mShowThanksgiving) {
+                drawPumpkinPatch(dc, (w * 0.83).toNumber(), decorY, (w * 0.046).toNumber());
+            }
+
+            // I. Ground visitors (squirrel scurrying, fox trotting, hedgehog
+            //    trundling) are drawn in front of the forest floor.
+            if (crit != null && !isSkyCritter(crit[0] as Number)) {
+                drawCritter(dc, crit);
+            }
 
             // (The maple-leaf seconds marker is drawn LAST, on top of everything.)
         }
@@ -364,31 +477,56 @@ class AutumnView extends WatchUi.WatchFace {
         drawXpBar(dc, cx, barY, barW, barH, stepsFraction);
 
         if (!burnIn) {
-            var actInfo = ActivityMonitor.getInfo();
+            var actInfo = mActInfo;
             var steps = (actInfo != null && actInfo.steps != null) ? actInfo.steps : 0;
             var stepsStr = steps.format("%d") + " STEPS";
             drawTextWithOutline(dc, cx, barY - 14, mFontLabel, stepsStr, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER, 0xFFFFFF);
         }
 
-        // --- Maple Leaf Seconds (drawn LAST so it sits above everything) ---
-        // A black-outlined maple leaf orbits the dial as the seconds marker. It is
-        // only animated in the active layer (not in burn-in/AOD low-power mode).
-        if (!mLowPower) {
+        // --- Maple Leaf Seconds (drawn LAST so it sits above everything) ----
+        // A black-outlined maple leaf orbits the dial as the seconds marker. Only
+        // shown while the watch is ACTIVE (high power); the OS stops per-second
+        // updates ~15s after a wrist raise, so rather than leave the marker
+        // parked/frozen we hide it until the watch wakes again. Gated on mIsSleep
+        // (not mLowPower) because MIP devices never set mLowPower.
+        if (!mIsSleep) {
             var secAngle = (secVal * 6.0) * Math.PI / 180.0;
-            var secRadius = (mWidth * 0.44).toNumber() - 10;
+            var secRadius = (w * 0.44).toNumber() - 10;
             var csx = cx + (secRadius * Math.sin(secAngle)).toNumber();
             var csy = cy - (secRadius * Math.cos(secAngle)).toNumber();
-            drawMapleLeaf(dc, csx, csy, (mWidth * 0.022).toNumber(), 0xE0651E, true);
+            drawMapleLeaf(dc, csx, csy, (w * 0.022).toNumber(), 0xE0651E, true);
+
+            // Adaptive quality: measure how long this active frame took and nudge
+            // the detail level so the watch keeps issuing per-second updates
+            // (i.e. the seconds marker keeps moving) instead of hitting the budget.
+            var dt = System.getTimer() - mFrameStart;
+            if (dt > Q_SLOW_MS) {
+                if (mQuality > 0) { mQuality--; }
+            } else if (dt < Q_FAST_MS) {
+                if (mQuality < 3) { mQuality++; }
+            }
         }
+    }
+
+    // Anti-burn-in pixel shift for AMOLED always-on mode. Cycles through a few
+    // small offsets so static pixels are not lit identically minute after minute.
+    private function computeBurnInShift() as Array<Number> {
+        var clock = (mClock != null) ? mClock : System.getClockTime();
+        var phase = clock.min % 4;
+        if (phase == 1)      { return [4, 2] as Array<Number>; }
+        else if (phase == 2) { return [-3, 4] as Array<Number>; }
+        else if (phase == 3) { return [3, -4] as Array<Number>; }
+        return [0, 0] as Array<Number>;
     }
 
     // ------------------------------------------------------------------ Elements
 
     function drawTime(dc as Dc, cx as Number, cy as Number) as Void {
-        var clock = System.getClockTime();
+        var clock = (mClock != null) ? mClock : System.getClockTime();
         var hour = clock.hour;
         var min = clock.min;
-        var is24 = System.getDeviceSettings().is24Hour;
+        var settings = (mSettings != null) ? mSettings : System.getDeviceSettings();
+        var is24 = settings.is24Hour;
         if (!is24) {
             hour = hour % 12;
             if (hour == 0) { hour = 12; }
@@ -406,8 +544,10 @@ class AutumnView extends WatchUi.WatchFace {
         var info = Gregorian.info(Time.now(), Time.FORMAT_MEDIUM);
         var dateStr = info.day_of_week.toUpper() + "   " + info.month.toUpper() + " " + info.day;
 
-        // Append weather if available
-        var weatherStr = getWeatherString();
+        // Append weather if available. Skipped in always-on/low-power so the
+        // weather lookup never runs inside the partial-update budget (and so the
+        // dim AOD date stays consistent between full and partial redraws).
+        var weatherStr = mLowPower ? null : getWeatherString();
         if (weatherStr != null) {
             dateStr = dateStr + "   •   " + weatherStr;
         }
@@ -433,15 +573,23 @@ class AutumnView extends WatchUi.WatchFace {
 
         var steps = 12;
         var stepW = w / steps;
-        var points = new [steps + 3] as Array<Array>;
-        points[0] = [w, h];
-        points[1] = [0, h];
+        // Reuse a persistent buffer (and its point pairs) instead of allocating
+        // a fresh array + sub-arrays on every call (twice per frame).
+        if (mHillPts == null) {
+            var buf = new [steps + 3] as Array<Array>;
+            for (var k = 0; k < steps + 3; k++) { buf[k] = [0, 0]; }
+            mHillPts = buf;
+        }
+        var points = mHillPts;
+        points[0][0] = w; points[0][1] = h;
+        points[1][0] = 0; points[1][1] = h;
 
         for (var i = 0; i <= steps; i++) {
             var x = i * stepW;
             var angle = (x.toFloat() / waveLen) + phase;
             var y = yBase + (amp * Math.sin(angle)).toNumber();
-            points[i + 2] = [x, y];
+            points[i + 2][0] = x;
+            points[i + 2][1] = y;
         }
 
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
@@ -455,24 +603,23 @@ class AutumnView extends WatchUi.WatchFace {
         var w = mWidth;
         var tSec = (min * 60 + secVal).toFloat();
 
-        // Tree layout: base X (fraction of width) + canopy scale. Two large trees
-        // frame the edges; two smaller ones sit further back toward the center.
-        var txf = [0.86, 0.10, 0.72, 0.27] as Array<Float>;
-        var tsc = [1.00, 0.92, 0.60, 0.64] as Array<Float>;
+        // Grove detail scales with adaptive quality (the grove is the single most
+        // expensive per-frame draw, so it sheds segments/leaves first under load).
+        var trunkSteps = (mQuality >= 3) ? 12 : (mQuality == 2) ? 10 : 8;
+        var blobCount  = (mQuality >= 2) ? 9  : (mQuality == 1) ? 7 : 5;
+        var leavesPerTree = (mQuality >= 2) ? 3 : (mQuality == 1) ? 2 : 1;
 
         // Draw the trunks + canopies first.
-        for (var i = 0; i < txf.size(); i++) {
+        for (var i = 0; i < FOREST_TXF.size(); i++) {
             var sway = 0.05 * Math.sin(tSec * 0.04 + i * 1.3);
-            drawAutumnTree(dc, (txf[i] * w).toNumber(), floorY, sway, tsc[i]);
+            drawAutumnTree(dc, (FOREST_TXF[i] * w).toNumber(), floorY, sway, FOREST_TSC[i], trunkSteps, blobCount);
         }
 
         // Then rain leaves down out of each canopy (drawn on top of the trees).
-        var colors = [0xE0651E, 0xE0A828, 0xC8501E, 0xB23A1E, 0xD4621E] as Array<Number>;
-        var leavesPerTree = 3;
-        for (var i = 0; i < txf.size(); i++) {
-            var scale = tsc[i];
+        for (var i = 0; i < FOREST_TXF.size(); i++) {
+            var scale = FOREST_TSC[i];
             var sway = 0.05 * Math.sin(tSec * 0.04 + i * 1.3);
-            var canopyX = canopyCenterX((txf[i] * w).toNumber(), sway, scale);
+            var canopyX = canopyCenterX((FOREST_TXF[i] * w).toNumber(), sway, scale);
             var canopyY = canopyCenterY(floorY, scale);
             var canopyR = (0.14 * w * scale);
 
@@ -492,7 +639,7 @@ class AutumnView extends WatchUi.WatchFace {
                 var drift = canopyR * 0.5 * Math.sin(tSec * 0.06 + seed);
                 var x = (canopyX + spread + drift * fall).toNumber();
 
-                drawMapleLeaf(dc, x, y, (w * 0.013 * scale).toNumber() + 2, colors[seed % colors.size()], false);
+                drawMapleLeaf(dc, x, y, (w * 0.013 * scale).toNumber() + 2, LEAF_COLORS[seed % LEAF_COLORS.size()], false);
             }
         }
     }
@@ -507,7 +654,7 @@ class AutumnView extends WatchUi.WatchFace {
     }
 
     // A bare-trunked deciduous tree with a fiery autumn canopy, sized by `scale`.
-    private function drawAutumnTree(dc as Dc, baseX as Number, baseY as Number, sway as Float, scale as Float) as Void {
+    private function drawAutumnTree(dc as Dc, baseX as Number, baseY as Number, sway as Float, scale as Float, trunkSteps as Number, blobCount as Number) as Void {
         var w = mWidth;
         var h = mHeight;
 
@@ -517,7 +664,6 @@ class AutumnView extends WatchUi.WatchFace {
         // Trunk (tapered, dark brown)
         var trunkColor = 0x3A2614;
         dc.setColor(trunkColor, Graphics.COLOR_TRANSPARENT);
-        var trunkSteps = 12;
         for (var i = 0; i <= trunkSteps; i++) {
             var tt = i.toFloat() / trunkSteps.toFloat();
             var x = (baseX + (trunkTopX - baseX) * tt).toNumber();
@@ -537,17 +683,11 @@ class AutumnView extends WatchUi.WatchFace {
         // Canopy - overlapping foliage blobs in fall colors
         var cxC = (trunkTopX + sway * 20).toNumber();
         var cyC = (trunkTopY - h * 0.02 * scale).toNumber();
-        // blob layout: [dxFrac, dyFrac, rFrac, colorIndex]
-        var colors = [0xB23A1E, 0xD4621E, 0xE89A2A, 0xC8501E, 0xE0A828] as Array<Number>;
-        var bx  = [ 0.00, -0.07,  0.07, -0.03,  0.05,  0.00, -0.09,  0.09,  0.03] as Array<Float>;
-        var by  = [-0.02,  0.01,  0.00, -0.06, -0.05,  0.05, -0.02, -0.03,  0.06] as Array<Float>;
-        var br  = [ 0.10,  0.085, 0.085, 0.075, 0.08,  0.075, 0.06,  0.06,  0.07] as Array<Float>;
-        var ci  = [ 1,     0,     2,     3,     2,     4,     0,     3,     1] as Array<Number>;
-        for (var i = 0; i < bx.size(); i++) {
-            var x = (cxC + bx[i] * w * scale + sway * 15).toNumber();
-            var y = (cyC + by[i] * h * scale).toNumber();
-            var r = (br[i] * w * scale).toNumber();
-            dc.setColor(colors[ci[i]], Graphics.COLOR_TRANSPARENT);
+        for (var i = 0; i < blobCount; i++) {
+            var x = (cxC + CANOPY_BX[i] * w * scale + sway * 15).toNumber();
+            var y = (cyC + CANOPY_BY[i] * h * scale).toNumber();
+            var r = (CANOPY_BR[i] * w * scale).toNumber();
+            dc.setColor(CANOPY_COLORS[CANOPY_CI[i]], Graphics.COLOR_TRANSPARENT);
             dc.fillCircle(x, y, r);
         }
     }
@@ -757,7 +897,7 @@ class AutumnView extends WatchUi.WatchFace {
     // ------------------------------------------------------------------- Data
 
     function getStepFraction() as Float {
-        var info = ActivityMonitor.getInfo();
+        var info = (mActInfo != null) ? mActInfo : ActivityMonitor.getInfo();
         if (info == null || info.steps == null) { return 0.0; }
         var steps = info.steps;
         var goal = mStepGoalOverride;
@@ -836,12 +976,12 @@ class AutumnView extends WatchUi.WatchFace {
     }
 
     function getSteps() as Number {
-        var info = ActivityMonitor.getInfo();
+        var info = (mActInfo != null) ? mActInfo : ActivityMonitor.getInfo();
         return (info != null && info.steps != null) ? info.steps : 0;
     }
 
     function getCalories() as Number {
-        var info = ActivityMonitor.getInfo();
+        var info = (mActInfo != null) ? mActInfo : ActivityMonitor.getInfo();
         return (info != null && info.calories != null) ? info.calories : 0;
     }
 
@@ -1023,6 +1163,667 @@ class AutumnView extends WatchUi.WatchFace {
         }
     }
 
+    // ------------------------------------------------------------ Critters
+
+    // Decide which little woodland visitor (if any) is crossing right now.
+    // Returns [type, dir, frac, seed] or null. At most one critter is ever active,
+    // and quiet periods leave the scene empty so it stays calm ("once in a while").
+    private function computeCritter(hour as Number, min as Number, sec as Number, isNight as Boolean) as Array or Null {
+        var PERIOD = 38.0;  // a visitor may appear once per this many seconds
+        var CROSS  = 8.0;   // how long the crossing animation lasts
+
+        var tDay = (hour * 3600 + min * 60 + sec).toFloat();
+        var period = (tDay / PERIOD).toNumber();
+        var local = tDay - period * PERIOD;
+
+        // ~1 in 5 windows is a quiet stretch with no visitor at all.
+        if (period % 5 == 0) { return null; }
+        if (local >= CROSS) { return null; }
+
+        var frac = local / CROSS;          // 0..1 progress across the screen
+        var dir = ((period * 31 + 7) % 2 == 0) ? 1 : -1;
+        var sel = (period * 17 + 5) % 4;
+
+        var type;
+        if (isNight) {
+            // night pool: hedgehog + fox forage, owl + bat take to the air.
+            // No squirrels or geese at night.
+            var nightPool = [CR_HEDGEHOG, CR_OWL, CR_FOX, CR_BAT] as Array<Number>;
+            type = nightPool[sel];
+        } else {
+            // day pool: squirrel, a skein of geese, fox, hedgehog.
+            var dayPool = [CR_SQUIRREL, CR_GEESE, CR_FOX, CR_HEDGEHOG] as Array<Number>;
+            type = dayPool[sel];
+        }
+
+        // When a seasonal-holiday mode is on, hand a slice of the crossings to a
+        // themed visitor (about 1 in 3) instead of the usual woodland one.
+        if (mShowHalloween || mShowThanksgiving) {
+            if (((period * 13 + 3) % 3) == 0) {
+                var pick = period * 7 + 2;
+                if (mShowHalloween && mShowThanksgiving) {
+                    type = (pick % 2 == 0) ? halloweenCritter(pick) : CR_TURKEY;
+                } else if (mShowHalloween) {
+                    type = halloweenCritter(pick);
+                } else {
+                    type = CR_TURKEY;
+                }
+            }
+        }
+        return [type, dir, frac, period] as Array;
+    }
+
+    // Alternate the two Halloween visitors deterministically.
+    private function halloweenCritter(pick as Number) as Number {
+        return ((pick / 2) % 2 == 0) ? CR_BLACKCAT : CR_GHOST;
+    }
+
+    // Sky critters fly across overhead (drawn behind the grove); the others walk
+    // along the ground (drawn in front of the forest floor).
+    private function isSkyCritter(type as Number) as Boolean {
+        return type == CR_GEESE || type == CR_OWL || type == CR_BAT || type == CR_GHOST;
+    }
+
+    // Draw the active critter, positioning it for its type.
+    private function drawCritter(dc as Dc, crit as Array) as Void {
+        var w = mWidth;
+        var h = mHeight;
+        var type = crit[0] as Number;
+        var dir = crit[1] as Number;
+        var frac = crit[2] as Float;
+
+        var margin = (w * 0.18).toNumber();
+        var span = w + 2 * margin;
+        var x;
+        if (dir == 1) {
+            x = (-margin + frac * span).toNumber();
+        } else {
+            x = (w + margin - frac * span).toNumber();
+        }
+
+        if (type == CR_SQUIRREL) {
+            var groundY = (h * 0.92).toNumber();
+            drawSquirrel(dc, x, groundY, dir, frac, (w * 0.038).toNumber());
+        } else if (type == CR_FOX) {
+            var groundY = (h * 0.915).toNumber();
+            drawFox(dc, x, groundY, dir, frac, (w * 0.045).toNumber());
+        } else if (type == CR_HEDGEHOG) {
+            var groundY = (h * 0.93).toNumber();
+            drawHedgehog(dc, x, groundY, dir, frac, (w * 0.04).toNumber());
+        } else if (type == CR_GEESE) {
+            var skyY = (h * 0.17).toNumber();
+            drawGeese(dc, x, skyY, dir, frac, (w * 0.035).toNumber());
+        } else if (type == CR_OWL) {
+            var skyY = (h * 0.23 + (h * 0.02) * Math.sin(frac * Math.PI * 2.0)).toNumber();
+            drawOwl(dc, x, skyY, dir, frac, (w * 0.05).toNumber());
+        } else if (type == CR_BAT) {
+            var skyY = (h * 0.22 + (h * 0.03) * Math.sin(frac * Math.PI * 4.0)).toNumber();
+            drawBat(dc, x, skyY, dir, frac, (w * 0.04).toNumber());
+        } else if (type == CR_BLACKCAT) {
+            var groundY = (h * 0.92).toNumber();
+            drawBlackCat(dc, x, groundY, dir, frac, (w * 0.045).toNumber());
+        } else if (type == CR_GHOST) {
+            var skyY = (h * 0.24 + (h * 0.04) * Math.sin(frac * Math.PI * 3.0)).toNumber();
+            drawGhost(dc, x, skyY, dir, frac, (w * 0.05).toNumber());
+        } else if (type == CR_TURKEY) {
+            var groundY = (h * 0.92).toNumber();
+            drawTurkey(dc, x, groundY, dir, frac, (w * 0.05).toNumber());
+        }
+    }
+
+    // ---- Squirrel (bounds across the forest floor, bushy tail curled up) ----
+    private function drawSquirrel(dc as Dc, x as Number, y as Number, dir as Number, frac as Float, s as Number) as Void {
+        if (s < 8) { s = 8; }
+        // A bounding gait: the body rises and dips as it scampers.
+        var hop = (Math.sin(frac * Math.PI * 12.0)).abs();
+        var yy = (y - hop * s * 0.45).toNumber();
+        var legPhase = frac * Math.PI * 18.0;
+        // black outline (4 diagonal offsets), then russet body
+        squirrelSil(dc, x - 1, yy - 1, dir, s, legPhase, 0x000000);
+        squirrelSil(dc, x + 1, yy - 1, dir, s, legPhase, 0x000000);
+        squirrelSil(dc, x - 1, yy + 1, dir, s, legPhase, 0x000000);
+        squirrelSil(dc, x + 1, yy + 1, dir, s, legPhase, 0x000000);
+        squirrelSil(dc, x, yy, dir, s, legPhase, 0xB5651D);
+        // pale belly + cheek
+        dc.setColor(0xE8C49A, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((x + dir * s * 0.55).toNumber(), (yy + s * 0.15).toNumber(), (s * 0.28).toNumber());
+        // eye
+        dc.setColor(0x140A04, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((x + dir * s * 0.95).toNumber(), (yy - s * 0.4).toNumber(), 2);
+    }
+
+    private function squirrelSil(dc as Dc, x as Number, y as Number, dir as Number, s as Number, legPhase as Float, c as Number) as Void {
+        dc.setColor(c, Graphics.COLOR_TRANSPARENT);
+        // hindquarters + front body
+        dc.fillCircle((x - dir * s * 0.2).toNumber(), y, (s * 0.55).toNumber());
+        dc.fillCircle((x + dir * s * 0.45).toNumber(), (y - s * 0.1).toNumber(), (s * 0.45).toNumber());
+        // little scampering legs
+        dc.setPenWidth(2);
+        var wob = (Math.sin(legPhase) * s * 0.2);
+        dc.drawLine((x - dir * s * 0.2).toNumber(), (y + s * 0.4).toNumber(), (x - dir * s * 0.2 - wob).toNumber(), (y + s * 0.85).toNumber());
+        dc.drawLine((x + dir * s * 0.4).toNumber(), (y + s * 0.4).toNumber(), (x + dir * s * 0.4 + wob).toNumber(), (y + s * 0.85).toNumber());
+        dc.setPenWidth(1);
+        // head + pointed ear
+        var hx = (x + dir * s * 0.9).toNumber();
+        var hy = (y - s * 0.35).toNumber();
+        dc.fillCircle(hx, hy, (s * 0.3).toNumber());
+        dc.fillPolygon([
+            [(hx - dir * s * 0.05).toNumber(), (hy - s * 0.2).toNumber()],
+            [(hx + dir * s * 0.1).toNumber(), (hy - s * 0.6).toNumber()],
+            [(hx + dir * s * 0.25).toNumber(), (hy - s * 0.15).toNumber()]
+        ] as Array<Array>);
+        // bushy tail, curling up and over the back (behind the travel dir)
+        var tx = (x - dir * s * 0.7).toNumber();
+        dc.fillCircle(tx, (y - s * 0.1).toNumber(), (s * 0.35).toNumber());
+        dc.fillCircle((tx - dir * s * 0.2).toNumber(), (y - s * 0.6).toNumber(), (s * 0.42).toNumber());
+        dc.fillCircle((tx + dir * s * 0.05).toNumber(), (y - s * 1.05).toNumber(), (s * 0.4).toNumber());
+        dc.fillCircle((tx + dir * s * 0.5).toNumber(), (y - s * 1.2).toNumber(), (s * 0.3).toNumber());
+    }
+
+    // ---- Fox (trots across the forest floor, white-tipped brush) ----
+    private function drawFox(dc as Dc, x as Number, y as Number, dir as Number, frac as Float, s as Number) as Void {
+        if (s < 9) { s = 9; }
+        var bob = (Math.sin(frac * Math.PI * 8.0) * s * 0.08).toNumber();
+        var yy = y - bob;
+        var legPhase = frac * Math.PI * 14.0;
+        foxSil(dc, x - 1, yy - 1, dir, s, legPhase, 0x000000);
+        foxSil(dc, x + 1, yy - 1, dir, s, legPhase, 0x000000);
+        foxSil(dc, x - 1, yy + 1, dir, s, legPhase, 0x000000);
+        foxSil(dc, x + 1, yy + 1, dir, s, legPhase, 0x000000);
+        foxSil(dc, x, yy, dir, s, legPhase, 0xD2691E);
+        // white-tipped brush
+        var tx = (x - dir * s * 1.05).toNumber();
+        dc.setColor(0xF5E6D0, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((tx - dir * s * 0.95).toNumber(), (yy - s * 0.55).toNumber(), (s * 0.3).toNumber());
+        // white cheek/chest
+        dc.fillCircle((x + dir * s * 1.15).toNumber(), (yy + s * 0.05).toNumber(), (s * 0.2).toNumber());
+        // dark socks
+        dc.setColor(0x2A1A0E, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+        var step = (Math.sin(legPhase) * s * 0.25);
+        dc.drawLine((x - dir * s * 0.5).toNumber(), (yy + s * 0.45).toNumber(), (x - dir * s * 0.5 - step).toNumber(), (yy + s * 0.95).toNumber());
+        dc.drawLine((x + dir * s * 0.6).toNumber(), (yy + s * 0.45).toNumber(), (x + dir * s * 0.6 + step).toNumber(), (yy + s * 0.95).toNumber());
+        dc.setPenWidth(1);
+        // eye + nose
+        var hx = (x + dir * s * 1.25).toNumber();
+        var hy = (yy - s * 0.3).toNumber();
+        dc.setColor(0x140A04, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((hx + dir * s * 0.1).toNumber(), hy, 2);
+        dc.fillCircle((hx + dir * s * 0.9).toNumber(), (hy + s * 0.15).toNumber(), 2);
+    }
+
+    private function foxSil(dc as Dc, x as Number, y as Number, dir as Number, s as Number, legPhase as Float, c as Number) as Void {
+        dc.setColor(c, Graphics.COLOR_TRANSPARENT);
+        // long body
+        dc.fillRoundedRectangle((x - s * 1.0).toNumber(), (y - s * 0.35).toNumber(), (s * 2.0).toNumber(), (s * 0.7).toNumber(), (s * 0.35).toNumber());
+        dc.fillCircle((x + dir * s * 0.9).toNumber(), y, (s * 0.4).toNumber());
+        // legs (front + back pair, trotting)
+        dc.setPenWidth(2);
+        var step = (Math.sin(legPhase) * s * 0.25);
+        dc.drawLine((x - dir * s * 0.5).toNumber(), (y + s * 0.2).toNumber(), (x - dir * s * 0.5 - step).toNumber(), (y + s * 0.95).toNumber());
+        dc.drawLine((x + dir * s * 0.6).toNumber(), (y + s * 0.2).toNumber(), (x + dir * s * 0.6 + step).toNumber(), (y + s * 0.95).toNumber());
+        dc.setPenWidth(1);
+        // head
+        var hx = (x + dir * s * 1.25).toNumber();
+        var hy = (y - s * 0.3).toNumber();
+        dc.fillCircle(hx, hy, (s * 0.42).toNumber());
+        // pointed snout
+        dc.fillPolygon([
+            [(hx + dir * s * 0.2).toNumber(), (hy - s * 0.1).toNumber()],
+            [(hx + dir * s * 1.0).toNumber(), (hy + s * 0.1).toNumber()],
+            [(hx + dir * s * 0.2).toNumber(), (hy + s * 0.28).toNumber()]
+        ] as Array<Array>);
+        // two upright ears
+        dc.fillPolygon([
+            [(hx - dir * s * 0.1).toNumber(), (hy - s * 0.25).toNumber()],
+            [(hx - dir * s * 0.05).toNumber(), (hy - s * 0.95).toNumber()],
+            [(hx + dir * s * 0.3).toNumber(), (hy - s * 0.3).toNumber()]
+        ] as Array<Array>);
+        dc.fillPolygon([
+            [(hx + dir * s * 0.25).toNumber(), (hy - s * 0.3).toNumber()],
+            [(hx + dir * s * 0.55).toNumber(), (hy - s * 0.9).toNumber()],
+            [(hx + dir * s * 0.6).toNumber(), (hy - s * 0.2).toNumber()]
+        ] as Array<Array>);
+        // sweeping brush tail
+        var tx = (x - dir * s * 1.0).toNumber();
+        dc.fillPolygon([
+            [tx, (y - s * 0.3).toNumber()],
+            [(tx - dir * s * 1.2).toNumber(), (y - s * 0.85).toNumber()],
+            [(tx - dir * s * 1.1).toNumber(), (y + s * 0.2).toNumber()],
+            [tx, (y + s * 0.3).toNumber()]
+        ] as Array<Array>);
+    }
+
+    // ---- Hedgehog (trundles along, spiny back, little snout) ----
+    private function drawHedgehog(dc as Dc, x as Number, y as Number, dir as Number, frac as Float, s as Number) as Void {
+        if (s < 8) { s = 8; }
+        var legPhase = frac * Math.PI * 16.0;
+        hedgehogSil(dc, x - 1, y - 1, dir, s, legPhase, 0x000000);
+        hedgehogSil(dc, x + 1, y - 1, dir, s, legPhase, 0x000000);
+        hedgehogSil(dc, x - 1, y + 1, dir, s, legPhase, 0x000000);
+        hedgehogSil(dc, x + 1, y + 1, dir, s, legPhase, 0x000000);
+        hedgehogSil(dc, x, y, dir, s, legPhase, 0x6E4A2E);
+        // pale snout/face
+        dc.setColor(0xC8A878, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((x + dir * s * 0.85).toNumber(), (y + s * 0.12).toNumber(), (s * 0.28).toNumber());
+        // nose + eye
+        dc.setColor(0x140A04, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((x + dir * s * 1.15).toNumber(), (y + s * 0.18).toNumber(), 2);
+        dc.fillCircle((x + dir * s * 0.8).toNumber(), (y - s * 0.05).toNumber(), 2);
+    }
+
+    private function hedgehogSil(dc as Dc, x as Number, y as Number, dir as Number, s as Number, legPhase as Float, c as Number) as Void {
+        dc.setColor(c, Graphics.COLOR_TRANSPARENT);
+        // domed spiny body
+        dc.fillRoundedRectangle((x - s * 0.95).toNumber(), (y - s * 0.4).toNumber(), (s * 1.9).toNumber(), (s * 0.85).toNumber(), (s * 0.42).toNumber());
+        dc.fillCircle(x, (y - s * 0.15).toNumber(), (s * 0.75).toNumber());
+        // spines radiating up and back
+        dc.setPenWidth(2);
+        for (var i = 0; i < 7; i++) {
+            var a = Math.PI * (0.95 + i * 0.13);   // upper-rear arc
+            var bx = (x + (s * 0.7) * Math.cos(a)).toNumber();
+            var by = (y - s * 0.15 + (s * 0.7) * Math.sin(a)).toNumber();
+            var tx2 = (x + (s * 1.15) * Math.cos(a)).toNumber();
+            var ty2 = (y - s * 0.15 + (s * 1.15) * Math.sin(a)).toNumber();
+            // bias spines toward the rear (away from travel dir)
+            dc.drawLine(bx - dir * 1, by, tx2 - dir * 3, ty2);
+        }
+        dc.setPenWidth(1);
+        // pointed face
+        var hx = (x + dir * s * 0.85).toNumber();
+        var hy = (y + s * 0.12).toNumber();
+        dc.fillCircle(hx, hy, (s * 0.32).toNumber());
+        dc.fillPolygon([
+            [hx, (hy - s * 0.2).toNumber()],
+            [(hx + dir * s * 0.5).toNumber(), (hy + s * 0.1).toNumber()],
+            [hx, (hy + s * 0.3).toNumber()]
+        ] as Array<Array>);
+        // little feet
+        dc.setPenWidth(2);
+        var step = (Math.sin(legPhase) * s * 0.12);
+        dc.drawLine((x - dir * s * 0.4).toNumber(), (y + s * 0.4).toNumber(), (x - dir * s * 0.4 - step).toNumber(), (y + s * 0.62).toNumber());
+        dc.drawLine((x + dir * s * 0.3).toNumber(), (y + s * 0.4).toNumber(), (x + dir * s * 0.3 + step).toNumber(), (y + s * 0.62).toNumber());
+        dc.setPenWidth(1);
+    }
+
+    // ---- Geese (a small migrating V crosses the sky) ----
+    private function drawGeese(dc as Dc, x as Number, y as Number, dir as Number, frac as Float, s as Number) as Void {
+        if (s < 6) { s = 6; }
+        var flap = Math.sin(frac * Math.PI * 10.0) * 0.35;
+        // lead bird at the apex (front), four more trailing in two arms.
+        birdChevron(dc, x, y, flap, s);
+        for (var i = 1; i <= 2; i++) {
+            var bx = (x - dir * i * s * 0.95).toNumber();
+            birdChevron(dc, bx, (y - i * s * 0.5).toNumber(), flap, s);
+            birdChevron(dc, bx, (y + i * s * 0.5).toNumber(), flap, s);
+        }
+    }
+
+    private function birdChevron(dc as Dc, x as Number, y as Number, flap as Float, s as Number) as Void {
+        dc.setColor(0x2A2418, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+        var wingY = (y - s * (0.3 + flap)).toNumber();
+        dc.drawLine((x - s).toNumber(), wingY, x, y);
+        dc.drawLine(x, y, (x + s).toNumber(), wingY);
+        dc.setPenWidth(1);
+    }
+
+    // ---- Owl (glides silently across the night sky, wings spread) ----
+    private function drawOwl(dc as Dc, x as Number, y as Number, dir as Number, frac as Float, s as Number) as Void {
+        if (s < 9) { s = 9; }
+        var flap = Math.sin(frac * Math.PI * 8.0);
+        owlSil(dc, x - 1, y - 1, dir, s, flap, 0x000000);
+        owlSil(dc, x + 1, y - 1, dir, s, flap, 0x000000);
+        owlSil(dc, x - 1, y + 1, dir, s, flap, 0x000000);
+        owlSil(dc, x + 1, y + 1, dir, s, flap, 0x000000);
+        owlSil(dc, x, y, dir, s, flap, 0x7A5230);
+        // pale facial disc
+        dc.setColor(0xC8A878, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((x - s * 0.22).toNumber(), (y - s * 0.5).toNumber(), (s * 0.24).toNumber());
+        dc.fillCircle((x + s * 0.22).toNumber(), (y - s * 0.5).toNumber(), (s * 0.24).toNumber());
+        // big eyes + beak
+        dc.setColor(0xFFD24A, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((x - s * 0.22).toNumber(), (y - s * 0.5).toNumber(), (s * 0.16).toNumber());
+        dc.fillCircle((x + s * 0.22).toNumber(), (y - s * 0.5).toNumber(), (s * 0.16).toNumber());
+        dc.setColor(0x140A04, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((x - s * 0.22).toNumber(), (y - s * 0.5).toNumber(), 2);
+        dc.fillCircle((x + s * 0.22).toNumber(), (y - s * 0.5).toNumber(), 2);
+        dc.setColor(0xE0902A, Graphics.COLOR_TRANSPARENT);
+        dc.fillPolygon([
+            [(x - 2).toNumber(), (y - s * 0.32).toNumber()],
+            [(x + 2).toNumber(), (y - s * 0.32).toNumber()],
+            [x, (y - s * 0.12).toNumber()]
+        ] as Array<Array>);
+    }
+
+    private function owlSil(dc as Dc, x as Number, y as Number, dir as Number, s as Number, flap as Float, c as Number) as Void {
+        dc.setColor(c, Graphics.COLOR_TRANSPARENT);
+        // rounded body + head
+        dc.fillRoundedRectangle((x - s * 0.5).toNumber(), (y - s * 0.7).toNumber(), s, (s * 1.3).toNumber(), (s * 0.45).toNumber());
+        // ear tufts
+        dc.fillPolygon([
+            [(x - s * 0.45).toNumber(), (y - s * 0.6).toNumber()],
+            [(x - s * 0.3).toNumber(), (y - s * 1.0).toNumber()],
+            [(x - s * 0.15).toNumber(), (y - s * 0.6).toNumber()]
+        ] as Array<Array>);
+        dc.fillPolygon([
+            [(x + s * 0.15).toNumber(), (y - s * 0.6).toNumber()],
+            [(x + s * 0.3).toNumber(), (y - s * 1.0).toNumber()],
+            [(x + s * 0.45).toNumber(), (y - s * 0.6).toNumber()]
+        ] as Array<Array>);
+        // wings spread to each side, flapping
+        var tipY = (y - flap * s * 0.5).toNumber();
+        dc.fillPolygon([
+            [(x - s * 0.4).toNumber(), (y - s * 0.2).toNumber()],
+            [(x - s * 1.7).toNumber(), tipY],
+            [(x - s * 0.4).toNumber(), (y + s * 0.4).toNumber()]
+        ] as Array<Array>);
+        dc.fillPolygon([
+            [(x + s * 0.4).toNumber(), (y - s * 0.2).toNumber()],
+            [(x + s * 1.7).toNumber(), tipY],
+            [(x + s * 0.4).toNumber(), (y + s * 0.4).toNumber()]
+        ] as Array<Array>);
+    }
+
+    // ---- Bat (flutters across the night sky on scalloped wings) ----
+    private function drawBat(dc as Dc, x as Number, y as Number, dir as Number, frac as Float, s as Number) as Void {
+        if (s < 7) { s = 7; }
+        var flap = Math.sin(frac * Math.PI * 16.0);
+        var tipY = (y - flap * s * 0.6).toNumber();
+        // a faint black outline pass, then the dusky body
+        batSil(dc, x, y, tipY, s, 0x000000, 1);
+        batSil(dc, x, y, tipY, s, 0x2A2233, 0);
+        // tiny eyes
+        dc.setColor(0xC83A3A, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((x - s * 0.12).toNumber(), (y - s * 0.05).toNumber(), 1);
+        dc.fillCircle((x + s * 0.12).toNumber(), (y - s * 0.05).toNumber(), 1);
+    }
+
+    private function batSil(dc as Dc, x as Number, y as Number, tipY as Number, s as Number, c as Number, grow as Number) as Void {
+        dc.setColor(c, Graphics.COLOR_TRANSPARENT);
+        var g = grow;
+        // body
+        dc.fillCircle(x, y, (s * 0.3).toNumber() + g);
+        // two ears
+        dc.fillPolygon([
+            [(x - s * 0.25).toNumber(), (y - s * 0.2).toNumber()],
+            [(x - s * 0.1).toNumber(), (y - s * 0.6).toNumber()],
+            [(x + 0).toNumber(), (y - s * 0.2).toNumber()]
+        ] as Array<Array>);
+        dc.fillPolygon([
+            [(x + 0).toNumber(), (y - s * 0.2).toNumber()],
+            [(x + s * 0.1).toNumber(), (y - s * 0.6).toNumber()],
+            [(x + s * 0.25).toNumber(), (y - s * 0.2).toNumber()]
+        ] as Array<Array>);
+        // left wing (scalloped lower edge via two triangles)
+        dc.fillPolygon([
+            [x, y],
+            [(x - s * 1.0).toNumber(), tipY],
+            [(x - s * 1.6).toNumber(), (y + s * 0.1).toNumber()],
+            [(x - s * 0.8).toNumber(), (y + s * 0.3).toNumber()],
+            [(x - s * 0.3).toNumber(), (y + s * 0.1).toNumber()]
+        ] as Array<Array>);
+        // right wing
+        dc.fillPolygon([
+            [x, y],
+            [(x + s * 1.0).toNumber(), tipY],
+            [(x + s * 1.6).toNumber(), (y + s * 0.1).toNumber()],
+            [(x + s * 0.8).toNumber(), (y + s * 0.3).toNumber()],
+            [(x + s * 0.3).toNumber(), (y + s * 0.1).toNumber()]
+        ] as Array<Array>);
+    }
+
+    // ---- Black cat (Halloween: arched back, curled tail, glowing eyes) ----
+    private function drawBlackCat(dc as Dc, x as Number, y as Number, dir as Number, frac as Float, s as Number) as Void {
+        if (s < 8) { s = 8; }
+        var legPhase = frac * Math.PI * 12.0;
+        // a faint midnight-violet rim, then the black body
+        catSil(dc, x, y, dir, s, legPhase, 0x2A2233, 1);
+        catSil(dc, x, y, dir, s, legPhase, 0x000000, 0);
+        // glowing eyes
+        dc.setColor(0xBFE04A, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((x + dir * s * 0.95).toNumber(), (y - s * 0.55).toNumber(), 2);
+        dc.fillCircle((x + dir * s * 1.15).toNumber(), (y - s * 0.55).toNumber(), 2);
+    }
+
+    private function catSil(dc as Dc, x as Number, y as Number, dir as Number, s as Number, legPhase as Float, c as Number, grow as Number) as Void {
+        dc.setColor(c, Graphics.COLOR_TRANSPARENT);
+        var g = grow;
+        // rear haunch + front shoulder
+        dc.fillCircle((x - dir * s * 0.7).toNumber(), y, (s * 0.5).toNumber() + g);
+        dc.fillCircle((x + dir * s * 0.65).toNumber(), y, (s * 0.45).toNumber() + g);
+        // arched back joining them
+        dc.fillPolygon([
+            [(x - dir * s * 0.7).toNumber(), (y - s * 0.5 - g).toNumber()],
+            [x, (y - s * 1.0 - g).toNumber()],
+            [(x + dir * s * 0.65).toNumber(), (y - s * 0.45 - g).toNumber()],
+            [(x + dir * s * 0.65).toNumber(), (y + s * 0.1).toNumber()],
+            [(x - dir * s * 0.7).toNumber(), (y + s * 0.1).toNumber()]
+        ] as Array<Array>);
+        // legs (front + back, stepping)
+        dc.setPenWidth(2 + g);
+        var step = (Math.sin(legPhase) * s * 0.2);
+        dc.drawLine((x - dir * s * 0.7).toNumber(), (y + s * 0.3).toNumber(), (x - dir * s * 0.7 - step).toNumber(), (y + s * 0.85).toNumber());
+        dc.drawLine((x + dir * s * 0.6).toNumber(), (y + s * 0.3).toNumber(), (x + dir * s * 0.6 + step).toNumber(), (y + s * 0.85).toNumber());
+        dc.setPenWidth(1);
+        // head + ears
+        var hx = (x + dir * s * 1.05).toNumber();
+        var hy = (y - s * 0.45).toNumber();
+        dc.fillCircle(hx, hy, (s * 0.34).toNumber() + g);
+        dc.fillPolygon([
+            [(hx - dir * s * 0.05).toNumber(), (hy - s * 0.2).toNumber()],
+            [(hx + dir * s * 0.05).toNumber(), (hy - s * 0.65).toNumber()],
+            [(hx + dir * s * 0.3).toNumber(), (hy - s * 0.25).toNumber()]
+        ] as Array<Array>);
+        dc.fillPolygon([
+            [(hx + dir * s * 0.25).toNumber(), (hy - s * 0.25).toNumber()],
+            [(hx + dir * s * 0.45).toNumber(), (hy - s * 0.6).toNumber()],
+            [(hx + dir * s * 0.5).toNumber(), (hy - s * 0.15).toNumber()]
+        ] as Array<Array>);
+        // tail curling up behind
+        var tx = (x - dir * s * 1.0).toNumber();
+        dc.setPenWidth(4 + g);
+        dc.drawLine(tx, (y - s * 0.1).toNumber(), (tx - dir * s * 0.3).toNumber(), (y - s * 0.8).toNumber());
+        dc.drawLine((tx - dir * s * 0.3).toNumber(), (y - s * 0.8).toNumber(), (tx + dir * s * 0.15).toNumber(), (y - s * 1.25).toNumber());
+        dc.setPenWidth(1);
+    }
+
+    // ---- Ghost (Halloween: a floaty sheet ghost with a wavy hem) ----
+    private function drawGhost(dc as Dc, x as Number, y as Number, dir as Number, frac as Float, s as Number) as Void {
+        if (s < 9) { s = 9; }
+        ghostSil(dc, x, y, s, 0x3A3A4A, 1);
+        ghostSil(dc, x, y, s, 0xF0F0F8, 0);
+        // hollow eyes + an "oooo" mouth
+        dc.setColor(0x2A2A38, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((x - s * 0.28).toNumber(), (y - s * 0.15).toNumber(), (s * 0.14).toNumber());
+        dc.fillCircle((x + s * 0.28).toNumber(), (y - s * 0.15).toNumber(), (s * 0.14).toNumber());
+        dc.fillCircle(x, (y + s * 0.3).toNumber(), (s * 0.12).toNumber());
+    }
+
+    private function ghostSil(dc as Dc, x as Number, y as Number, s as Number, c as Number, grow as Number) as Void {
+        dc.setColor(c, Graphics.COLOR_TRANSPARENT);
+        var g = grow;
+        // rounded head + body
+        dc.fillCircle(x, (y - s * 0.2).toNumber(), (s * 0.7).toNumber() + g);
+        dc.fillRectangle((x - s * 0.7 - g).toNumber(), (y - s * 0.2).toNumber(), (s * 1.4 + 2 * g).toNumber(), (s * 0.85).toNumber());
+        // three scalloped tails along the hem
+        dc.fillCircle((x - s * 0.46).toNumber(), (y + s * 0.65).toNumber(), (s * 0.26).toNumber() + g);
+        dc.fillCircle(x, (y + s * 0.7).toNumber(), (s * 0.26).toNumber() + g);
+        dc.fillCircle((x + s * 0.46).toNumber(), (y + s * 0.65).toNumber(), (s * 0.26).toNumber() + g);
+    }
+
+    // ---- Turkey (Thanksgiving: fanned tail, red wattle, struts) ----
+    private function drawTurkey(dc as Dc, x as Number, y as Number, dir as Number, frac as Float, s as Number) as Void {
+        if (s < 9) { s = 9; }
+        var legPhase = frac * Math.PI * 10.0;
+
+        // Tail fan behind (away from travel dir): concentric colored feathers.
+        var fanX = (x - dir * s * 0.7).toNumber();
+        var fanY = (y - s * 0.3).toNumber();
+        var feather = [0x7A3F1E, 0xB23A1E, 0xD4622A, 0xE0A828, 0xD4622A, 0xB23A1E, 0x7A3F1E] as Array<Number>;
+        for (var i = 0; i < 7; i++) {
+            var a = Math.PI * (0.62 + i * 0.085);  // spread up-and-back
+            var fx = (fanX - dir * (s * 1.45) * Math.cos(a)).toNumber();
+            var fy = (fanY - (s * 1.45) * Math.sin(a)).toNumber();
+            // black outline, then the feather color
+            dc.setColor(0x1A0E06, Graphics.COLOR_TRANSPARENT);
+            dc.fillCircle(fx, fy, (s * 0.3).toNumber() + 1);
+            dc.setColor(feather[i], Graphics.COLOR_TRANSPARENT);
+            dc.fillCircle(fx, fy, (s * 0.26).toNumber());
+        }
+
+        // black outline pass + body
+        turkeySil(dc, x, y, dir, s, legPhase, 0x000000, 1);
+        turkeySil(dc, x, y, dir, s, legPhase, 0x5A3015, 0);
+        // pale breast
+        dc.setColor(0x8A5A2E, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((x + dir * s * 0.55).toNumber(), (y + s * 0.1).toNumber(), (s * 0.3).toNumber());
+        // red wattle + yellow beak + eye on the head
+        var hx = (x + dir * s * 1.05).toNumber();
+        var hy = (y - s * 0.55).toNumber();
+        dc.setColor(0xC8281E, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((hx + dir * s * 0.1).toNumber(), (hy + s * 0.3).toNumber(), (s * 0.12).toNumber());
+        dc.setColor(0xE0A828, Graphics.COLOR_TRANSPARENT);
+        dc.fillPolygon([
+            [(hx + dir * s * 0.2).toNumber(), (hy + s * 0.02).toNumber()],
+            [(hx + dir * s * 0.6).toNumber(), (hy + s * 0.12).toNumber()],
+            [(hx + dir * s * 0.2).toNumber(), (hy + s * 0.22).toNumber()]
+        ] as Array<Array>);
+        dc.setColor(0x140A04, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle((hx + dir * s * 0.05).toNumber(), hy, 2);
+    }
+
+    private function turkeySil(dc as Dc, x as Number, y as Number, dir as Number, s as Number, legPhase as Float, c as Number, grow as Number) as Void {
+        dc.setColor(c, Graphics.COLOR_TRANSPARENT);
+        var g = grow;
+        // plump body
+        dc.fillCircle(x, y, (s * 0.7).toNumber() + g);
+        dc.fillCircle((x + dir * s * 0.4).toNumber(), (y + s * 0.05).toNumber(), (s * 0.55).toNumber() + g);
+        // legs (stepping)
+        dc.setColor((g > 0) ? c : 0xE0A828, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2 + g);
+        var step = (Math.sin(legPhase) * s * 0.18);
+        dc.drawLine((x + dir * s * 0.1).toNumber(), (y + s * 0.55).toNumber(), (x + dir * s * 0.1 - step).toNumber(), (y + s * 1.0).toNumber());
+        dc.drawLine((x + dir * s * 0.45).toNumber(), (y + s * 0.55).toNumber(), (x + dir * s * 0.45 + step).toNumber(), (y + s * 1.0).toNumber());
+        dc.setPenWidth(1);
+        // neck + head
+        dc.setColor(c, Graphics.COLOR_TRANSPARENT);
+        dc.fillRoundedRectangle((x + dir * s * 0.6).toNumber(), (y - s * 0.6).toNumber(), (s * 0.3).toNumber() + g, (s * 0.7).toNumber(), 3);
+        dc.fillCircle((x + dir * s * 1.05).toNumber(), (y - s * 0.55).toNumber(), (s * 0.26).toNumber() + g);
+    }
+
+    // ----------------------------------------------------------- Decorations
+
+    // Carved, glowing jack-o'-lantern resting on the leaf litter (Halloween).
+    private function drawJackOLantern(dc as Dc, x as Number, y as Number, s as Number, secVal as Number) as Void {
+        if (s < 10) { s = 10; }
+        // warm glow that flickers gently with the seconds
+        var flick = 0.85 + 0.15 * Math.sin(secVal.toFloat() * 0.9);
+        dc.setColor(scaleColor(0xFF8A1E, 0.30 * flick), Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(x, y, (s * 1.35).toNumber());
+
+        // black silhouette (ribbed body, slightly oversized) for legibility
+        dc.setColor(0x000000, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(x, y, (s * 1.05).toNumber());
+        dc.fillCircle((x - s * 0.55).toNumber(), y, (s * 0.85).toNumber());
+        dc.fillCircle((x + s * 0.55).toNumber(), y, (s * 0.85).toNumber());
+
+        // orange ribbed body
+        dc.setColor(0xE0651E, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(x, y, s);
+        dc.fillCircle((x - s * 0.55).toNumber(), y, (s * 0.8).toNumber());
+        dc.fillCircle((x + s * 0.55).toNumber(), y, (s * 0.8).toNumber());
+        // rib shading
+        dc.setColor(0xB24A12, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+        dc.drawLine((x - s * 0.3).toNumber(), (y - s * 0.75).toNumber(), (x - s * 0.3).toNumber(), (y + s * 0.75).toNumber());
+        dc.drawLine((x + s * 0.3).toNumber(), (y - s * 0.75).toNumber(), (x + s * 0.3).toNumber(), (y + s * 0.75).toNumber());
+        dc.setPenWidth(1);
+
+        // stem
+        dc.setColor(0x3F5A1E, Graphics.COLOR_TRANSPARENT);
+        dc.fillRectangle((x - s * 0.12).toNumber(), (y - s * 1.2).toNumber(), (s * 0.24).toNumber(), (s * 0.35).toNumber());
+
+        // glowing carved face (lit from within)
+        var lit = lerpColor(0xFFD24A, 0xFFF0A0, flick - 0.85);
+        dc.setColor(lit, Graphics.COLOR_TRANSPARENT);
+        // triangular eyes
+        dc.fillPolygon([
+            [(x - s * 0.55).toNumber(), (y - s * 0.15).toNumber()],
+            [(x - s * 0.2).toNumber(), (y - s * 0.15).toNumber()],
+            [(x - s * 0.37).toNumber(), (y + s * 0.15).toNumber()]
+        ] as Array<Array>);
+        dc.fillPolygon([
+            [(x + s * 0.2).toNumber(), (y - s * 0.15).toNumber()],
+            [(x + s * 0.55).toNumber(), (y - s * 0.15).toNumber()],
+            [(x + s * 0.37).toNumber(), (y + s * 0.15).toNumber()]
+        ] as Array<Array>);
+        // small nose
+        dc.fillPolygon([
+            [x, (y + s * 0.05).toNumber()],
+            [(x - s * 0.12).toNumber(), (y + s * 0.3).toNumber()],
+            [(x + s * 0.12).toNumber(), (y + s * 0.3).toNumber()]
+        ] as Array<Array>);
+        // jagged grin
+        dc.fillPolygon([
+            [(x - s * 0.6).toNumber(), (y + s * 0.4).toNumber()],
+            [(x - s * 0.35).toNumber(), (y + s * 0.55).toNumber()],
+            [(x - s * 0.15).toNumber(), (y + s * 0.4).toNumber()],
+            [x, (y + s * 0.58).toNumber()],
+            [(x + s * 0.15).toNumber(), (y + s * 0.4).toNumber()],
+            [(x + s * 0.35).toNumber(), (y + s * 0.55).toNumber()],
+            [(x + s * 0.6).toNumber(), (y + s * 0.4).toNumber()],
+            [(x + s * 0.4).toNumber(), (y + s * 0.72).toNumber()],
+            [(x - s * 0.4).toNumber(), (y + s * 0.72).toNumber()]
+        ] as Array<Array>);
+    }
+
+    // A little harvest patch of pumpkins + a gourd on the leaf litter (Thanksgiving).
+    private function drawPumpkinPatch(dc as Dc, x as Number, y as Number, s as Number) as Void {
+        if (s < 9) { s = 9; }
+        // a smaller pumpkin behind, a green-gold gourd, then the main pumpkin
+        drawPumpkin(dc, (x + s * 1.0).toNumber(), (y + s * 0.25).toNumber(), (s * 0.62).toNumber(), 0xD4622A);
+        drawGourd(dc, (x - s * 1.05).toNumber(), (y + s * 0.35).toNumber(), (s * 0.55).toNumber());
+        drawPumpkin(dc, x, y, s, 0xE0651E);
+    }
+
+    private function drawPumpkin(dc as Dc, x as Number, y as Number, s as Number, color as Number) as Void {
+        // black outline
+        dc.setColor(0x000000, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(x, y, s + 1);
+        dc.fillCircle((x - s * 0.5).toNumber(), y, (s * 0.78).toNumber() + 1);
+        dc.fillCircle((x + s * 0.5).toNumber(), y, (s * 0.78).toNumber() + 1);
+        // ribbed orange body
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(x, y, s);
+        dc.fillCircle((x - s * 0.5).toNumber(), y, (s * 0.78).toNumber());
+        dc.fillCircle((x + s * 0.5).toNumber(), y, (s * 0.78).toNumber());
+        // rib shading
+        dc.setColor(scaleColor(color, 0.7), Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+        dc.drawLine((x - s * 0.28).toNumber(), (y - s * 0.7).toNumber(), (x - s * 0.28).toNumber(), (y + s * 0.7).toNumber());
+        dc.drawLine((x + s * 0.28).toNumber(), (y - s * 0.7).toNumber(), (x + s * 0.28).toNumber(), (y + s * 0.7).toNumber());
+        dc.setPenWidth(1);
+        // stem
+        dc.setColor(0x6E4A22, Graphics.COLOR_TRANSPARENT);
+        dc.fillRectangle((x - s * 0.12).toNumber(), (y - s * 1.15).toNumber(), (s * 0.24).toNumber(), (s * 0.3).toNumber());
+    }
+
+    private function drawGourd(dc as Dc, x as Number, y as Number, s as Number) as Void {
+        // outline
+        dc.setColor(0x000000, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(x, (y + s * 0.4).toNumber(), (s * 0.7).toNumber() + 1);
+        dc.fillCircle(x, (y - s * 0.4).toNumber(), (s * 0.4).toNumber() + 1);
+        // green-gold body: bulb + neck
+        dc.setColor(0x9AA82A, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(x, (y + s * 0.4).toNumber(), (s * 0.7).toNumber());
+        dc.setColor(0xE0A828, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(x, (y - s * 0.4).toNumber(), (s * 0.4).toNumber());
+        // stem
+        dc.setColor(0x6E4A22, Graphics.COLOR_TRANSPARENT);
+        dc.fillRectangle((x - s * 0.1).toNumber(), (y - s * 0.95).toNumber(), (s * 0.2).toNumber(), (s * 0.3).toNumber());
+    }
+
     // ----------------------------------------------------------- Sun times
 
     // Recompute today's local sunrise/sunset from the watch's last-known
@@ -1037,7 +1838,16 @@ class AutumnView extends WatchUi.WatchFace {
             mSunrise = 6.5;
             mSunset = 18.5;
             mSunValid = false;
+            mSunLastTry = -10000;  // new day: allow an immediate retry
         }
+
+        // Not yet valid for today: a location fix (or a usable result) isn't
+        // available. Throttle retries so we don't run the location lookup + the
+        // heavy sunrise/sunset trig on every redraw while we wait.
+        var nowSec = Time.now().value();
+        if ((nowSec - mSunLastTry) < 60) { return; }
+        mSunLastTry = nowSec;
+
         var loc = getLocationDeg();
         if (loc == null) { return; }
         var offset = System.getClockTime().timeZoneOffset.toFloat() / 3600.0;
@@ -1123,16 +1933,23 @@ class AutumnView extends WatchUi.WatchFace {
         return (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
     }
 
+    // NOTE: these use bounded modulo arithmetic rather than `while` loops. A
+    // non-finite input (NaN/Infinity) from the sun math would make a subtract-
+    // in-a-loop spin forever and hang the watch face; modulo can never loop.
     private function normDeg(a as Float) as Float {
-        while (a < 0.0) { a += 360.0; }
-        while (a >= 360.0) { a -= 360.0; }
-        return a;
+        if (!(a > -1.0e9 && a < 1.0e9)) { return 0.0; }  // guard NaN / Infinity
+        var r = a - 360.0 * Math.floor(a / 360.0);
+        if (r < 0.0) { r += 360.0; }
+        if (r >= 360.0) { r -= 360.0; }
+        return r;
     }
 
     private function normHour(a as Float) as Float {
-        while (a < 0.0) { a += 24.0; }
-        while (a >= 24.0) { a -= 24.0; }
-        return a;
+        if (!(a > -1.0e9 && a < 1.0e9)) { return 0.0; }  // guard NaN / Infinity
+        var r = a - 24.0 * Math.floor(a / 24.0);
+        if (r < 0.0) { r += 24.0; }
+        if (r >= 24.0) { r -= 24.0; }
+        return r;
     }
 
     // ------------------------------------------------------------ Color helpers
@@ -1174,15 +1991,18 @@ class AutumnView extends WatchUi.WatchFace {
         var sr = mSunrise;
         var ss = mSunset;
         var hours;
+
+        // The keyframe colors are identical for both schedules; only the hour
+        // anchors differ, so reuse the hoisted color tables and avoid rebuilding
+        // three nine-element arrays on every frame.
         if (sr > 1.6 && ss < 22.4 && (ss - sr) > 4.0) {
             var mid = (sr + ss) / 2.0;
             hours = [0.0, sr - 1.5, sr, sr + 1.5, mid, ss - 1.5, ss, ss + 1.5, 24.0];
         } else {
-            hours = [0.0, 5.0, 6.5, 9.0, 14.0, 17.0, 18.5, 20.5, 24.0];
+            hours = SKY_HOURS_FALLBACK;
         }
-
-        var topColors    = [0x080814, 0x141029, 0x6E4A6A, 0x4E86A8, 0x5AA0C0, 0xB0743C, 0x9A3A28, 0x241834, 0x080814] as Array<Number>;
-        var bottomColors = [0x10101F, 0x33243F, 0xFF955A, 0xE8C486, 0xCDE0DC, 0xFFB347, 0xFFC95A, 0x4A2C48, 0x10101F] as Array<Number>;
+        var topColors    = SKY_TOP;
+        var bottomColors = SKY_BOTTOM;
 
         var idx = 0;
         for (var i = 0; i < hours.size() - 1; i++) {
@@ -1197,6 +2017,53 @@ class AutumnView extends WatchUi.WatchFace {
         var cBottom = lerpColor(bottomColors[idx], bottomColors[idx+1], frac);
 
         return [cTop, cBottom] as Array<Number>;
+    }
+
+    // Cached AMOLED sky gradient. Returns a buffered bitmap of the gradient, or
+    // null if buffered bitmaps aren't available / couldn't be allocated (the
+    // caller then renders the gradient directly). The expensive per-row fill loop
+    // only runs when the colors or dimensions change (≈once per minute) or when
+    // the graphics pool has reclaimed the previous buffer.
+    private function getSkyBitmap(w as Number, skyH as Number, cTop as Number, cBottom as Number) as Graphics.BufferedBitmap or Null {
+        if (!(Graphics has :createBufferedBitmap)) { return null; }
+
+        var bmp = (mSkyBufRef != null) ? mSkyBufRef.get() : null;
+
+        // Allocate the buffer ONCE (or only re-allocate if the graphics pool
+        // reclaimed it, or the size changed). Recreating it every minute just
+        // because the colors changed churns the pool and can exhaust it over
+        // time, which silently drops us into the slow per-frame fallback below.
+        if (bmp == null || w != mSkyKeyW || skyH != mSkyKeyH) {
+            try {
+                var ref = Graphics.createBufferedBitmap({ :width => w, :height => skyH });
+                if (ref == null) { mSkyBufRef = null; return null; }
+                mSkyBufRef = ref;
+                bmp = ref.get();
+                if (bmp == null) { return null; }
+            } catch (e) {
+                mSkyBufRef = null;
+                return null;
+            }
+            mSkyKeyW = w;
+            mSkyKeyH = skyH;
+            mSkyKeyTop = cTop + 1;  // invalidate so the gradient repaints below
+        }
+
+        // Repaint into the EXISTING buffer only when the colors change (~once a
+        // minute), reusing the same allocation instead of making a new one.
+        if (cTop != mSkyKeyTop || cBottom != mSkyKeyBottom) {
+            var bdc = bmp.getDc();
+            var step = 4;
+            for (var y = 0; y < skyH; y += step) {
+                var frac = y.toFloat() / skyH.toFloat();
+                var c = lerpColor(cTop, cBottom, frac);
+                bdc.setColor(c, Graphics.COLOR_TRANSPARENT);
+                bdc.fillRectangle(0, y, w, step);
+            }
+            mSkyKeyTop = cTop;
+            mSkyKeyBottom = cBottom;
+        }
+        return bmp;
     }
 
     // ----------------------------------------------------------- Lifecycle
@@ -1220,7 +2087,7 @@ class AutumnView extends WatchUi.WatchFace {
                 var conditions = Weather.getCurrentConditions();
                 if (conditions != null && conditions.temperature != null) {
                     var temp = conditions.temperature;
-                    var settings = System.getDeviceSettings();
+                    var settings = (mSettings != null) ? mSettings : System.getDeviceSettings();
                     var isImperial = (settings has :temperatureUnits) && (settings.temperatureUnits != System.UNIT_METRIC);
                     if (isImperial) {
                         temp = (temp * 9.0 / 5.0 + 32.0).toNumber();
@@ -1242,15 +2109,27 @@ class AutumnView extends WatchUi.WatchFace {
             dc.drawText(x, y, font, text, justify);
             return;
         }
+        // Outline cost scales with adaptive quality. The long date line is the
+        // single most expensive text, so shedding outline passes here is the
+        // biggest per-frame win when the device is struggling:
+        //   q>=3 -> full 8-neighbour outline; q==2 -> 4 diagonals;
+        //   q==1 -> 2 diagonals;             q==0 -> no outline.
         dc.setColor(0x000000, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(x - 1, y - 1, font, text, justify);
-        dc.drawText(x + 1, y - 1, font, text, justify);
-        dc.drawText(x - 1, y + 1, font, text, justify);
-        dc.drawText(x + 1, y + 1, font, text, justify);
-        dc.drawText(x - 1, y,     font, text, justify);
-        dc.drawText(x + 1, y,     font, text, justify);
-        dc.drawText(x,     y - 1, font, text, justify);
-        dc.drawText(x,     y + 1, font, text, justify);
+        if (mQuality >= 2) {
+            dc.drawText(x - 1, y - 1, font, text, justify);
+            dc.drawText(x + 1, y - 1, font, text, justify);
+            dc.drawText(x - 1, y + 1, font, text, justify);
+            dc.drawText(x + 1, y + 1, font, text, justify);
+            if (mQuality >= 3) {
+                dc.drawText(x - 1, y,     font, text, justify);
+                dc.drawText(x + 1, y,     font, text, justify);
+                dc.drawText(x,     y - 1, font, text, justify);
+                dc.drawText(x,     y + 1, font, text, justify);
+            }
+        } else if (mQuality == 1) {
+            dc.drawText(x - 1, y - 1, font, text, justify);
+            dc.drawText(x + 1, y + 1, font, text, justify);
+        }
         dc.setColor(textColor, Graphics.COLOR_TRANSPARENT);
         dc.drawText(x, y, font, text, justify);
     }
@@ -1280,12 +2159,62 @@ class AutumnView extends WatchUi.WatchFace {
         dc.fillPolygon([[x - 8, y - 3], [x + 8, y - 3], [x, y + 7]] as Array<Array>);
     }
 
-    // Low-power partial update called once per second in sleep mode.
-    // Redraw only when the minute changes to stay within AMOLED power budget.
+    // Low-power partial update, called up to once per second in sleep mode.
+    //
+    // This MUST stay cheap: onPartialUpdate runs under a strict execution-time /
+    // power budget, and exceeding it repeatedly makes the system disable partial
+    // updates (the face "freezes" in always-on). The old implementation called
+    // the full onUpdate() here, clearing and re-rendering the ENTIRE screen,
+    // which is exactly what the budget forbids.
+    //
+    // The always-on layer shows no seconds, so nothing changes sub-minute. We
+    // therefore redraw only when the minute rolls over, clip to the central
+    // time/date band, and clear + repaint just that region.
+    //
+    // This cheap clipped path is ONLY safe on AMOLED always-on (burn-in) mode.
+    // On MIP devices the sleep frame is the full colour scene, so clipping +
+    // clearing a band here would paint a black rectangle over it; in that case
+    // we fall back to the original full redraw.
     function onPartialUpdate(dc as Dc) as Void {
-        var min = System.getClockTime().min;
+        var clock = System.getClockTime();
+        var min = clock.min;
         if (min == mLastMin) { return; }
         mLastMin = min;
-        onUpdate(dc);
+        mClock = clock;
+
+        var settings = System.getDeviceSettings();
+        mSettings = settings;  // cache for drawTime / getWeatherString this frame
+        var hasBurnIn = (settings has :requiresBurnInProtection) && settings.requiresBurnInProtection;
+        var aod = hasBurnIn && mIsSleep;
+
+        // Not AMOLED always-on (or no clip support): preserve the original
+        // full-scene minute refresh.
+        if (!aod || !(dc has :setClip)) {
+            onUpdate(dc);
+            return;
+        }
+
+        mLowPower = true;
+
+        // Match the anti-burn-in pixel shift used by the full minute redraw.
+        var shift = computeBurnInShift();
+        var cx = mCenterX + shift[0];
+        var cy = mCenterY + shift[1];
+
+        // Clip to the central time/date band so the clear + redraw is bounded to
+        // a small region instead of the whole display.
+        var clipY = (mHeight * 0.30).toNumber();
+        var clipH = (mHeight * 0.34).toNumber();
+        if (dc has :setClip) { dc.setClip(0, clipY, mWidth, clipH); }
+
+        dc.setColor(BG_COLOR, BG_COLOR);
+        dc.clear();
+
+        drawTime(dc, cx, cy - (mHeight * 0.05).toNumber());
+        if (mShowDate) {
+            drawDate(dc, cx, cy + (mHeight * 0.06).toNumber());
+        }
+
+        if (dc has :clearClip) { dc.clearClip(); }
     }
 }

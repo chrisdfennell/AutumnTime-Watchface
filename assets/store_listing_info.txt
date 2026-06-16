@@ -14,13 +14,15 @@ Autumn — Golden-Hour Fall Foliage Watch Face
 ------------------------------------------------------------------------
 FIELD: Description (Max 4000 characters)
 ------------------------------------------------------------------------
-Autumn is a premium, high-fidelity digital watch face featuring a warm, crisp golden-hour fall aesthetic. Experience a living sky, drifting clouds, rolling hills, and a swaying grove of fiery maple trees, all procedurally rendered — with leaves that flutter down out of the canopies. The sky and sun track your real sunrise and sunset, and two configurable complications keep the data you care about on your wrist. Large, outlined digital time keeps you connected and styled for the season.
+Autumn is a premium, high-fidelity digital watch face featuring a warm, crisp golden-hour fall aesthetic. Experience a living sky, drifting clouds, rolling hills, and a swaying grove of fiery maple trees, all procedurally rendered — with leaves that flutter down out of the canopies and woodland critters that wander through. The sky and sun track your real sunrise and sunset, and two configurable complications keep the data you care about on your wrist. Large, outlined digital time keeps you connected and styled for the season.
 
 FEATURES & DETAILS
 • LIVING SKY ON REAL SUN TIMES: A procedural backdrop that shifts colors dynamically by time of day (dawn purples, crisp midday blue, amber/crimson sunset, and a starry dusky-purple night), anchored to the actual sunrise/sunset for your location and date.
 • ARCING SUN & MOON: Day/night orbital progression of a glowing harvest sun (with rotating rays and bloom) and a pale crescent moon, following the true day arc.
 • PROCEDURAL ANIMATIONS: Drifting clouds, gently rolling autumn hills, and a swaying grove of deciduous trees with fiery red/orange/gold canopies.
 • FALLING LEAVES: Maple leaves spill out of each tree's canopy and flutter to the leaf-litter forest floor.
+• WOODLAND CRITTERS: Once in a while a little visitor crosses the scene — a squirrel scampering or a fox trotting along the forest floor, a hedgehog trundling past, a small skein of geese migrating overhead, or, after dark, an owl gliding or a bat fluttering by. Subtle and occasional (at most one at a time, with quiet stretches between), and easily turned off in settings.
+• OPTIONAL HOLIDAY THEMES: Two off-by-default toggles dress the scene for the season. HALLOWEEN adds a glowing carved jack-o'-lantern on the leaf litter and lets a black cat or a ghost join the visitors. THANKSGIVING adds a harvest patch of pumpkins and gourds and lets a fan-tailed turkey strut across. Turn on either, both, or neither.
 • ROTATING SECONDS: A black-outlined maple leaf second indicator orbits the perimeter, drawn on top of everything else so it stays legible over the time, date, and complications.
 • CONFIGURABLE COMPLICATIONS: Choose what each bottom slot shows — Heart Rate, Body Battery, Device Battery, Steps, or Calories (or turn it Off) — each with a matching warm-toned icon. Defaults: bottom-left = Heart Rate, bottom-right = Device Battery. A harvest-gold steps bar with a live count sits below.
 • HIGH-CONTRAST OUTLINES: All texts (clock, date, weather, and complication values) feature a crisp black outline for absolute readability against the dynamic visual backdrops.
@@ -39,6 +41,9 @@ SETTINGS
 • Step Goal Override — steps for a full harvest bar; 0 uses the watch's own step goal.
 • Bottom-Left Complication — Heart Rate, Body Battery, Device Battery, Steps, Calories, or Off.
 • Bottom-Right Complication — same options (default: Device Battery).
+• Show Woodland Critters — toggle the crossing visitors (squirrel, fox, hedgehog, geese, owl, bat).
+• Halloween Theme — glowing jack-o'-lantern plus black cat and ghost visitors (off by default).
+• Thanksgiving Theme — harvest pumpkins and gourds plus a strutting turkey (off by default).
 
 PRIVACY
 Autumn uses only the SensorHistory permission to read Body Battery. It does not collect or transmit any data off your watch.
@@ -52,6 +57,13 @@ Equip Autumn, and take a moment in the crisp fall air.
 ------------------------------------------------------------------------
 FIELD: What's New in this Version (Max 4000 characters)
 ------------------------------------------------------------------------
+Version 1.3.0
+
+• WOODLAND CRITTERS: Now and then a little visitor crosses the scene — a squirrel, fox, or hedgehog along the forest floor, a skein of migrating geese overhead, or an owl or bat after dark. At most one at a time, with quiet stretches between, and a new "Show Woodland Critters" setting to turn them off.
+• HALLOWEEN & THANKSGIVING THEMES: Two new optional toggles. Halloween adds a glowing jack-o'-lantern and a black cat / ghost to the visitors; Thanksgiving adds a harvest pumpkin patch and a strutting turkey. Both off by default.
+• SMOOTHER & MORE STABLE: A sweep of performance and stability fixes for the always-on/low-power path and slower panels — the always-on display now repaints only the time/date band each minute (well inside the power budget), the AMOLED sky gradient is cached, per-frame allocations and duplicate sensor reads were eliminated, and an adaptive-quality system keeps the scene animating on every device. These resolve reports of the face "freezing" or the seconds marker stalling.
+• The maple-leaf seconds marker now hides cleanly when the watch is in low power instead of sitting frozen.
+
 Version 1.2.0
 
 • BROAD DEVICE SUPPORT: Autumn now runs on every Connect IQ 4.0+ round Garmin watch — Forerunner (incl. 965/970), fenix 7/8, epix 2/Pro, enduro 3, Venu 2/3, Vivoactive 5/6, Instinct 3/E/Crossover, and the Approach, Descent, D2, and MARQ specialty watches.
