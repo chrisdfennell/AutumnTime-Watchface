@@ -5,8 +5,10 @@ import Toybox.WatchUi;
 import Toybox.Time;
 import Toybox.Time.Gregorian;
 import Toybox.ActivityMonitor;
+import Toybox.Activity;
 import Toybox.Application;
 import Toybox.SensorHistory;
+import Toybox.Position;
 import Toybox.Math;
 import Toybox.Weather;
 
@@ -14,12 +16,19 @@ import Toybox.Weather;
 // Autumn - a golden-hour fall foliage watch face.
 //
 //   - Center:  large digital time (Rounded) + elegant date line (Segoe UI)
-//   - Left:    Body Battery, a warm maple-orange heart
-//   - Right:   device battery, a golden-amber droplet
+//   - Left:    configurable complication (default heart rate)
+//   - Right:   configurable complication (default device battery)
 //   - Bottom:  steps progress bar, styled as a harvest gold bar
 //   - Background: living autumn sky gradient, arcing sun/moon, drifting clouds,
 //                 rolling hills, a leaf-litter forest floor, a swaying autumn tree,
 //                 and maple leaves drifting + orbiting as the seconds hand
+//
+// The two bottom complications are chosen in the app settings (heart rate, Body
+// Battery, device battery, steps, or calories) and each draws a matching icon.
+// The sun, day/night, and sky track the REAL sunrise/sunset computed from the
+// watch's location and today's date, falling back to a fixed autumn schedule when
+// no location fix is available. The maple-leaf seconds marker is drawn last (on
+// top of everything) with a black outline so it stays legible.
 //
 // Everything scales cleanly relative to the screen dimensions (dc.getWidth()/getHeight()).
 //
@@ -37,9 +46,29 @@ class AutumnView extends WatchUi.WatchFace {
     private var mFlatGlobes as Boolean = false; // true on MIP: flat 2-tone fills (no banded gradient)
     private var mLastMin as Number = -1;       // throttles low-power partial updates
 
+    // --- Complication option ids (must match resources/settings list values) ---
+    private const COMP_OFF      = 0;
+    private const COMP_HR       = 1;  // heart rate (BPM)
+    private const COMP_BODY     = 2;  // Body Battery (%)
+    private const COMP_BATTERY  = 3;  // device battery (%)
+    private const COMP_STEPS    = 4;  // step count
+    private const COMP_CALORIES = 5;  // calories (kcal)
+
     // --- Settings (see resources/settings) ---
     private var mShowDate as Boolean = true;
     private var mStepGoalOverride as Number = 0;  // 0 => use device step goal
+    private var mLeftComp as Number = COMP_HR;       // bottom-left complication
+    private var mRightComp as Number = COMP_BATTERY; // bottom-right complication
+
+    // --- Heart-rate cache (sensor read throttled to once every ~10s) ---
+    private var mCachedHr as Number or Null = null;
+    private var mHrLastSec as Number = -100;
+
+    // --- Sunrise/sunset cache (recomputed when the day or first fix changes) ---
+    private var mSunDay as Number = -1;        // day-of-year the times were computed for
+    private var mSunValid as Boolean = false;  // true once a real location fix was used
+    private var mSunrise as Float = 6.5;       // local hours; defaults = fixed autumn schedule
+    private var mSunset as Float = 18.5;
 
     // --- Fonts (vector fonts with safe fallbacks) ---
     private var mFontTime as Graphics.FontType or Null = null;
@@ -80,8 +109,12 @@ class AutumnView extends WatchUi.WatchFace {
             if (Application has :Properties) {
                 var showDate = Application.Properties.getValue("ShowDate");
                 var stepGoal = Application.Properties.getValue("StepGoalOverride");
+                var leftComp = Application.Properties.getValue("LeftComplication");
+                var rightComp = Application.Properties.getValue("RightComplication");
                 if (showDate != null) { mShowDate = showDate; }
                 if (stepGoal != null) { mStepGoalOverride = stepGoal; }
+                if (leftComp != null) { mLeftComp = leftComp; }
+                if (rightComp != null) { mRightComp = rightComp; }
             }
         } catch (e) {
             // keep defaults
@@ -169,7 +202,10 @@ class AutumnView extends WatchUi.WatchFace {
         if (!mLowPower) {
             // --- ACTIVE VISUAL LAYER ---
 
-            // A. Get living autumn sky gradient colors for the current time
+            // A. Resolve today's sunrise/sunset (cached), then get the living
+            //    autumn-sky gradient colors for the current time.
+            updateSunTimes();
+            var tNow = hour.toFloat() + min.toFloat() / 60.0;
             var skyColors = getSkyColors(hour, min);
             var cTop = skyColors[0];
             var cBottom = skyColors[1];
@@ -191,8 +227,10 @@ class AutumnView extends WatchUi.WatchFace {
                 }
             }
 
+            var isNight = !(tNow >= mSunrise && tNow < mSunset);
+
             // C. Draw Stars at night
-            if (hour >= 21 || hour < 5) {
+            if (isNight) {
                 dc.setColor(0xFFFFFF, Graphics.COLOR_TRANSPARENT);
                 var starX = [70, 120, 180, 240, 310, 380, 90, 150, 220, 290, 360, 130, 200, 270, 340, 110, 250, 330] as Array<Number>;
                 var starY = [50, 70, 45, 60, 55, 75, 110, 95, 120, 105, 115, 160, 150, 175, 155, 200, 210, 195] as Array<Number>;
@@ -203,11 +241,11 @@ class AutumnView extends WatchUi.WatchFace {
                 }
             }
 
-            // D. Draw Arcing Sun / Moon
-            var dayStart = 6.0;
-            var dayEnd = 18.0;
-            var t = hour.toFloat() + min.toFloat() / 60.0;
-            var isDay = (t >= dayStart && t < dayEnd);
+            // D. Draw Arcing Sun / Moon along the real day arc
+            var dayStart = mSunrise;
+            var dayEnd = mSunset;
+            var t = tNow;
+            var isDay = !isNight;
             var arcR = (w * 0.38).toNumber();
             var arcCenterY = (h * 0.70).toNumber();
 
@@ -215,8 +253,8 @@ class AutumnView extends WatchUi.WatchFace {
             if (isDay) {
                 angle = Math.PI - (Math.PI * (t - dayStart) / (dayEnd - dayStart));
             } else {
-                var tNight = (t < dayStart) ? (t + 6.0) : (t - dayEnd);
-                angle = Math.PI - (Math.PI * tNight / 12.0);
+                var tNight = (t < dayStart) ? (t + (24.0 - dayEnd)) : (t - dayEnd);
+                angle = Math.PI - (Math.PI * tNight / (24.0 - (dayEnd - dayStart)));
             }
             var sx = cx + (arcR * Math.cos(angle)).toNumber();
             var sy = arcCenterY - (arcR * Math.sin(angle)).toNumber();
@@ -300,12 +338,7 @@ class AutumnView extends WatchUi.WatchFace {
             //    falling out of each canopy.
             drawForest(dc, floorY, min, secVal);
 
-            // J. Draw Maple Leaf Seconds orbiting
-            var secAngle = (secVal * 6.0) * Math.PI / 180.0;
-            var secRadius = (w * 0.44).toNumber() - 10;
-            var csx = cx + (secRadius * Math.sin(secAngle)).toNumber();
-            var csy = cy - (secRadius * Math.cos(secAngle)).toNumber();
-            drawMapleLeaf(dc, csx, csy, (w * 0.022).toNumber(), 0xE0651E, true);
+            // (The maple-leaf seconds marker is drawn LAST, on top of everything.)
         }
 
         // --- Center Clock & Date ---
@@ -319,47 +352,9 @@ class AutumnView extends WatchUi.WatchFace {
         var leftX    = (w * 0.22).toNumber() + dx;
         var rightX   = (w * 0.78).toNumber() + dx;
 
-        // Left Complication: Body Battery (Maple Heart)
-        var bodyBattery = getBodyBattery();
-        var bodyAvail = (bodyBattery != null);
-        var bodyVal = bodyAvail ? bodyBattery : 0;
-
-
-        if (bodyAvail) {
-            var valStr = bodyVal.format("%d") + "%";
-            var color = mLowPower ? 0x6E6E6E : 0xFFFFFF;
-            var textWidth = dc.getTextWidthInPixels(valStr, mFontLabel);
-
-            // Total width of icon (16) + gap (6) + textWidth
-            var totalW = 16 + 6 + textWidth;
-            var startX = leftX - totalW / 2;
-
-            // Draw heart icon centered at startX + 8
-            var iconColor = mLowPower ? 0x6E6E6E : C_BODY_BRIGHT;
-            drawHeartIcon(dc, startX + 8, metricsY, iconColor);
-
-            // Draw text starting at startX + 22
-            drawTextWithOutline(dc, startX + 22, metricsY, mFontLabel, valStr, Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER, color);
-        }
-
-        // Right Complication: Device Battery (Amber Droplet)
-        var stats = System.getSystemStats();
-        var battery = (stats.battery != null) ? stats.battery.toNumber() : 0;
-
-        var valStr = battery.format("%d") + "%";
-        var color = mLowPower ? 0x6E6E6E : 0xFFFFFF;
-        var textWidth = dc.getTextWidthInPixels(valStr, mFontLabel);
-
-        // Total width of icon (12) + gap (6) + textWidth
-        var totalW = 12 + 6 + textWidth;
-        var startX = rightX - totalW / 2;
-
-        // Draw droplet icon centered at startX + 6
-        var iconColor = mLowPower ? 0x6E6E6E : C_BATT_BRIGHT;
-        drawDropletIcon(dc, startX + 6, metricsY, iconColor);
-
-        // Draw text starting at startX + 18
-        drawTextWithOutline(dc, startX + 18, metricsY, mFontLabel, valStr, Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER, color);
+        // Bottom complications are user-configurable (see resources/settings).
+        drawComplication(dc, leftX, metricsY, mLeftComp);
+        drawComplication(dc, rightX, metricsY, mRightComp);
 
         // Steps Progress Bar & Numeric Text (Centered)
         var barW = (w * 0.38).toNumber();
@@ -373,6 +368,17 @@ class AutumnView extends WatchUi.WatchFace {
             var steps = (actInfo != null && actInfo.steps != null) ? actInfo.steps : 0;
             var stepsStr = steps.format("%d") + " STEPS";
             drawTextWithOutline(dc, cx, barY - 14, mFontLabel, stepsStr, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER, 0xFFFFFF);
+        }
+
+        // --- Maple Leaf Seconds (drawn LAST so it sits above everything) ---
+        // A black-outlined maple leaf orbits the dial as the seconds marker. It is
+        // only animated in the active layer (not in burn-in/AOD low-power mode).
+        if (!mLowPower) {
+            var secAngle = (secVal * 6.0) * Math.PI / 180.0;
+            var secRadius = (mWidth * 0.44).toNumber() - 10;
+            var csx = cx + (secRadius * Math.sin(secAngle)).toNumber();
+            var csy = cy - (secRadius * Math.cos(secAngle)).toNumber();
+            drawMapleLeaf(dc, csx, csy, (mWidth * 0.022).toNumber(), 0xE0651E, true);
         }
     }
 
@@ -791,6 +797,344 @@ class AutumnView extends WatchUi.WatchFace {
         return null;
     }
 
+    // Current heart rate in BPM. The sensor reading is cached and refreshed at
+    // most once every ~10 seconds to stay within the watch-face power budget.
+    // Returns null when no recent reading is available.
+    function getHeartRate() as Number or Null {
+        var nowSec = Time.now().value();
+        if (mCachedHr != null && (nowSec - mHrLastSec) < 10) {
+            return mCachedHr;
+        }
+        mHrLastSec = nowSec;
+        try {
+            if (Toybox has :Activity) {
+                var info = Activity.getActivityInfo();
+                if (info != null && info.currentHeartRate != null) {
+                    mCachedHr = info.currentHeartRate;
+                    return mCachedHr;
+                }
+            }
+            if ((Toybox has :ActivityMonitor) && (ActivityMonitor has :getHeartRateHistory)) {
+                var it = ActivityMonitor.getHeartRateHistory(1, true);
+                if (it != null) {
+                    var s = it.next();
+                    if (s != null && s.heartRate != null && s.heartRate != ActivityMonitor.INVALID_HR_SAMPLE) {
+                        mCachedHr = s.heartRate;
+                        return mCachedHr;
+                    }
+                }
+            }
+        } catch (e) {
+            // fall through
+        }
+        return mCachedHr;
+    }
+
+    function getDeviceBattery() as Number {
+        var stats = System.getSystemStats();
+        return (stats.battery != null) ? stats.battery.toNumber() : 0;
+    }
+
+    function getSteps() as Number {
+        var info = ActivityMonitor.getInfo();
+        return (info != null && info.steps != null) ? info.steps : 0;
+    }
+
+    function getCalories() as Number {
+        var info = ActivityMonitor.getInfo();
+        return (info != null && info.calories != null) ? info.calories : 0;
+    }
+
+    // --------------------------------------------------------- Complications
+
+    // Draw one configurable complication (icon + value) centered on cx.
+    private function drawComplication(dc as Dc, cx as Number, y as Number, opt as Number) as Void {
+        if (opt == COMP_OFF) { return; }
+
+        var valStr = "--";
+        var level = -1;
+        var accent = 0xFFFFFF;
+
+        if (opt == COMP_HR) {
+            var hr = getHeartRate();
+            valStr = (hr != null) ? hr.format("%d") : "--";
+            accent = 0xFF6A2E;            // maple-orange heart
+        } else if (opt == COMP_BODY) {
+            var bb = getBodyBattery();
+            valStr = (bb != null) ? bb.format("%d") + "%" : "--";
+            accent = 0xFFC043;            // harvest-gold bolt
+        } else if (opt == COMP_BATTERY) {
+            var b = getDeviceBattery();
+            valStr = b.format("%d") + "%";
+            level = b;
+            accent = 0xFFB23A;            // golden-amber battery
+        } else if (opt == COMP_STEPS) {
+            valStr = getSteps().format("%d");
+            accent = 0xE0A828;            // wheat-gold boot
+        } else if (opt == COMP_CALORIES) {
+            valStr = getCalories().format("%d");
+            accent = 0xD4622A;            // burnt-orange flame
+        } else {
+            return;
+        }
+
+        var textColor = mLowPower ? 0x6E6E6E : 0xFFFFFF;
+        var iconColor = mLowPower ? 0x6E6E6E : accent;
+
+        var textWidth = dc.getTextWidthInPixels(valStr, mFontLabel);
+        var totalW = 16 + 6 + textWidth;
+        var startX = cx - totalW / 2;
+
+        drawComplicationIcon(dc, opt, startX + 8, y, iconColor, level);
+        drawTextWithOutline(dc, startX + 22, y, mFontLabel, valStr,
+            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER, textColor);
+    }
+
+    private function drawComplicationIcon(dc as Dc, kind as Number, x as Number, y as Number, color as Number, level as Number) as Void {
+        if (kind == COMP_HR) {
+            drawHeartIcon(dc, x, y, color);
+        } else if (kind == COMP_BODY) {
+            drawBoltIcon(dc, x, y, color);
+        } else if (kind == COMP_BATTERY) {
+            drawBatteryIcon(dc, x, y, color, level);
+        } else if (kind == COMP_STEPS) {
+            drawBootIcon(dc, x, y, color);
+        } else if (kind == COMP_CALORIES) {
+            drawFlameIcon(dc, x, y, color);
+        }
+    }
+
+    // Body Battery -> lightning bolt (energy).
+    private function drawBoltIcon(dc as Dc, x as Number, y as Number, color as Number) as Void {
+        if (mLowPower) {
+            dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+            drawBoltShape(dc, x, y);
+            return;
+        }
+        dc.setColor(0x000000, Graphics.COLOR_TRANSPARENT);
+        drawBoltShape(dc, x - 1, y - 1);
+        drawBoltShape(dc, x + 1, y - 1);
+        drawBoltShape(dc, x - 1, y + 1);
+        drawBoltShape(dc, x + 1, y + 1);
+        drawBoltShape(dc, x - 1, y);
+        drawBoltShape(dc, x + 1, y);
+        drawBoltShape(dc, x,     y - 1);
+        drawBoltShape(dc, x,     y + 1);
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        drawBoltShape(dc, x, y);
+    }
+
+    private function drawBoltShape(dc as Dc, x as Number, y as Number) as Void {
+        dc.fillPolygon([
+            [x + 2, y - 8], [x - 5, y + 1], [x - 1, y + 1],
+            [x - 2, y + 8], [x + 5, y - 2], [x + 1, y - 2]
+        ] as Array<Array>);
+    }
+
+    // Steps -> boot.
+    private function drawBootIcon(dc as Dc, x as Number, y as Number, color as Number) as Void {
+        if (mLowPower) {
+            dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+            drawBootShape(dc, x, y);
+            return;
+        }
+        dc.setColor(0x000000, Graphics.COLOR_TRANSPARENT);
+        drawBootShape(dc, x - 1, y - 1);
+        drawBootShape(dc, x + 1, y - 1);
+        drawBootShape(dc, x - 1, y + 1);
+        drawBootShape(dc, x + 1, y + 1);
+        drawBootShape(dc, x - 1, y);
+        drawBootShape(dc, x + 1, y);
+        drawBootShape(dc, x,     y - 1);
+        drawBootShape(dc, x,     y + 1);
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        drawBootShape(dc, x, y);
+    }
+
+    private function drawBootShape(dc as Dc, x as Number, y as Number) as Void {
+        dc.fillRoundedRectangle(x - 4, y - 7, 6, 10, 2);  // leg
+        dc.fillRoundedRectangle(x - 4, y + 1, 11, 4, 2);  // foot
+    }
+
+    // Calories -> flame.
+    private function drawFlameIcon(dc as Dc, x as Number, y as Number, color as Number) as Void {
+        if (mLowPower) {
+            dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+            drawFlameShape(dc, x, y);
+            return;
+        }
+        dc.setColor(0x000000, Graphics.COLOR_TRANSPARENT);
+        drawFlameShape(dc, x - 1, y - 1);
+        drawFlameShape(dc, x + 1, y - 1);
+        drawFlameShape(dc, x - 1, y + 1);
+        drawFlameShape(dc, x + 1, y + 1);
+        drawFlameShape(dc, x - 1, y);
+        drawFlameShape(dc, x + 1, y);
+        drawFlameShape(dc, x,     y - 1);
+        drawFlameShape(dc, x,     y + 1);
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        drawFlameShape(dc, x, y);
+    }
+
+    private function drawFlameShape(dc as Dc, x as Number, y as Number) as Void {
+        dc.fillPolygon([
+            [x, y - 8], [x + 5, y - 1], [x + 4, y + 4], [x - 4, y + 4], [x - 5, y - 1]
+        ] as Array<Array>);
+        dc.fillCircle(x, y + 2, 4);
+    }
+
+    // Battery icon: a horizontal cell with a terminal nub and a fill bar whose
+    // width tracks the live charge level (0-100). A black halo behind it keeps
+    // the outline legible against the moving backdrop, matching the heart icon.
+    private function drawBatteryIcon(dc as Dc, x as Number, y as Number, color as Number, level as Number) as Void {
+        var bw = 14;
+        var bh = 9;
+        var left = x - bw / 2;
+        var top = y - bh / 2;
+
+        var lvl = level;
+        if (lvl < 0) { lvl = 0; }
+        if (lvl > 100) { lvl = 100; }
+
+        if (mLowPower) {
+            dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+            dc.setPenWidth(1);
+            dc.drawRoundedRectangle(left, top, bw, bh, 2);
+            dc.fillRectangle(left + bw, y - 2, 2, 4);
+            return;
+        }
+
+        // Black halo backing (shell + nub) for legibility.
+        dc.setColor(0x000000, Graphics.COLOR_TRANSPARENT);
+        dc.fillRoundedRectangle(left - 1, top - 1, bw + 2, bh + 2, 3);
+        dc.fillRectangle(left + bw, y - 3, 4, 6);
+
+        // Battery shell + terminal nub.
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(1);
+        dc.drawRoundedRectangle(left, top, bw, bh, 2);
+        dc.fillRectangle(left + bw, y - 2, 2, 4);
+
+        // Inner fill bar proportional to the charge level.
+        var innerMax = bw - 4;
+        var fillW = (innerMax * lvl / 100).toNumber();
+        if (fillW > 0) {
+            dc.fillRectangle(left + 2, top + 2, fillW, bh - 4);
+        }
+    }
+
+    // ----------------------------------------------------------- Sun times
+
+    // Recompute today's local sunrise/sunset from the watch's last-known
+    // location. Cached per day; keeps the fixed autumn fallback until a real
+    // location fix is available, then stops recomputing for the day.
+    private function updateSunTimes() as Void {
+        var info = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
+        var doy = dayOfYear(info.year, info.month, info.day);
+        if (doy == mSunDay && mSunValid) { return; }
+        if (doy != mSunDay) {
+            mSunDay = doy;
+            mSunrise = 6.5;
+            mSunset = 18.5;
+            mSunValid = false;
+        }
+        var loc = getLocationDeg();
+        if (loc == null) { return; }
+        var offset = System.getClockTime().timeZoneOffset.toFloat() / 3600.0;
+        var sr = computeSunEvent(doy, loc[0], loc[1], offset, true);
+        var ss = computeSunEvent(doy, loc[0], loc[1], offset, false);
+        if (sr != null && ss != null && ss > sr) {
+            mSunrise = sr;
+            mSunset = ss;
+            mSunValid = true;
+        }
+    }
+
+    // Last-known location in degrees [lat, lon], or null. Prefers the activity
+    // location, then the weather observation location - neither powers the GPS.
+    private function getLocationDeg() as Array<Float> or Null {
+        try {
+            if (Toybox has :Activity) {
+                var ai = Activity.getActivityInfo();
+                if (ai != null && ai.currentLocation != null) {
+                    var d = ai.currentLocation.toDegrees();
+                    return [d[0].toFloat(), d[1].toFloat()];
+                }
+            }
+        } catch (e) {
+        }
+        try {
+            if (Toybox has :Weather) {
+                var cc = Weather.getCurrentConditions();
+                if (cc != null && cc.observationLocationPosition != null) {
+                    var d = cc.observationLocationPosition.toDegrees();
+                    return [d[0].toFloat(), d[1].toFloat()];
+                }
+            }
+        } catch (e) {
+        }
+        return null;
+    }
+
+    // Standard sunrise/sunset algorithm (NOAA / Almanac). Returns local time in
+    // hours (0-24) for the event, or null at extreme latitudes where the sun
+    // does not rise/set on the given day.
+    private function computeSunEvent(n as Number, lat as Float, lng as Float, offset as Float, sunrise as Boolean) as Float or Null {
+        var ZENITH = 90.833;
+        var D2R = Math.PI / 180.0;
+        var R2D = 180.0 / Math.PI;
+
+        var lngHour = lng / 15.0;
+        var tt = sunrise ? (n + ((6.0 - lngHour) / 24.0)) : (n + ((18.0 - lngHour) / 24.0));
+
+        var m = (0.9856 * tt) - 3.289;
+        var l = m + (1.916 * Math.sin(m * D2R)) + (0.020 * Math.sin(2.0 * m * D2R)) + 282.634;
+        l = normDeg(l);
+
+        var ra = Math.atan(0.91764 * Math.tan(l * D2R)) * R2D;
+        ra = normDeg(ra);
+        var lQuad = (Math.floor(l / 90.0) * 90.0).toFloat();
+        var raQuad = (Math.floor(ra / 90.0) * 90.0).toFloat();
+        ra = ra + (lQuad - raQuad);
+        ra = ra / 15.0;
+
+        var sinDec = 0.39782 * Math.sin(l * D2R);
+        var cosDec = Math.cos(Math.asin(sinDec));
+
+        var cosH = (Math.cos(ZENITH * D2R) - (sinDec * Math.sin(lat * D2R))) / (cosDec * Math.cos(lat * D2R));
+        if (cosH > 1.0 || cosH < -1.0) { return null; }
+
+        var bigH = sunrise ? (360.0 - (Math.acos(cosH) * R2D)) : (Math.acos(cosH) * R2D);
+        bigH = bigH / 15.0;
+
+        var bigT = bigH + ra - (0.06571 * tt) - 6.622;
+        var ut = normHour(bigT - lngHour);
+        return normHour(ut + offset);
+    }
+
+    private function dayOfYear(year as Number, month as Number, day as Number) as Number {
+        var cum = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334] as Array<Number>;
+        var n = cum[month - 1] + day;
+        if (month > 2 && isLeapYear(year)) { n += 1; }
+        return n;
+    }
+
+    private function isLeapYear(y as Number) as Boolean {
+        return (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
+    }
+
+    private function normDeg(a as Float) as Float {
+        while (a < 0.0) { a += 360.0; }
+        while (a >= 360.0) { a -= 360.0; }
+        return a;
+    }
+
+    private function normHour(a as Float) as Float {
+        while (a < 0.0) { a += 24.0; }
+        while (a >= 24.0) { a -= 24.0; }
+        return a;
+    }
+
     // ------------------------------------------------------------ Color helpers
 
     function chordHalf(r as Number, dy as Number) as Number {
@@ -818,11 +1162,25 @@ class AutumnView extends WatchUi.WatchFace {
         return lerpColor(0x000000, c, f);
     }
 
-    // Smoothly calculate autumn sky colors based on hour of day
+    // Smoothly calculate autumn sky colors based on hour of day. The 9 keyframes
+    // run midnight -> pre-dawn -> sunrise glow -> morning -> midday -> late
+    // afternoon -> sunset glow -> twilight -> midnight. When the day is "normal"
+    // the keyframe HOURS are anchored to the real sunrise/sunset so dawn and the
+    // golden-hour sunset land at the true times; otherwise a fixed autumn schedule
+    // is used. The warm autumn color palette itself is identical in both cases.
     private function getSkyColors(hour as Number, min as Number) as Array<Number> {
         var t = hour.toFloat() + min.toFloat() / 60.0;
 
-        var hours = [0.0, 5.0, 6.5, 9.0, 14.0, 17.0, 18.5, 20.5, 24.0] as Array<Float>;
+        var sr = mSunrise;
+        var ss = mSunset;
+        var hours;
+        if (sr > 1.6 && ss < 22.4 && (ss - sr) > 4.0) {
+            var mid = (sr + ss) / 2.0;
+            hours = [0.0, sr - 1.5, sr, sr + 1.5, mid, ss - 1.5, ss, ss + 1.5, 24.0];
+        } else {
+            hours = [0.0, 5.0, 6.5, 9.0, 14.0, 17.0, 18.5, 20.5, 24.0];
+        }
+
         var topColors    = [0x080814, 0x141029, 0x6E4A6A, 0x4E86A8, 0x5AA0C0, 0xB0743C, 0x9A3A28, 0x241834, 0x080814] as Array<Number>;
         var bottomColors = [0x10101F, 0x33243F, 0xFF955A, 0xE8C486, 0xCDE0DC, 0xFFB347, 0xFFC95A, 0x4A2C48, 0x10101F] as Array<Number>;
 
@@ -920,30 +1278,6 @@ class AutumnView extends WatchUi.WatchFace {
         dc.fillCircle(x - 4, y - 3, 4);
         dc.fillCircle(x + 4, y - 3, 4);
         dc.fillPolygon([[x - 8, y - 3], [x + 8, y - 3], [x, y + 7]] as Array<Array>);
-    }
-
-    private function drawDropletIcon(dc as Dc, x as Number, y as Number, color as Number) as Void {
-        if (mLowPower) {
-            dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-            drawDropletShape(dc, x, y);
-            return;
-        }
-        dc.setColor(0x000000, Graphics.COLOR_TRANSPARENT);
-        drawDropletShape(dc, x - 1, y - 1);
-        drawDropletShape(dc, x + 1, y - 1);
-        drawDropletShape(dc, x - 1, y + 1);
-        drawDropletShape(dc, x + 1, y + 1);
-        drawDropletShape(dc, x - 1, y);
-        drawDropletShape(dc, x + 1, y);
-        drawDropletShape(dc, x,     y - 1);
-        drawDropletShape(dc, x,     y + 1);
-        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-        drawDropletShape(dc, x, y);
-    }
-
-    private function drawDropletShape(dc as Dc, x as Number, y as Number) as Void {
-        dc.fillCircle(x, y + 2, 6);
-        dc.fillPolygon([[x - 6, y + 2], [x + 6, y + 2], [x, y - 7]] as Array<Array>);
     }
 
     // Low-power partial update called once per second in sleep mode.
