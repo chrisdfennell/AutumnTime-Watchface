@@ -14,18 +14,18 @@ Autumn — Golden-Hour Fall Foliage Watch Face
 ------------------------------------------------------------------------
 FIELD: Description (Max 4000 characters)
 ------------------------------------------------------------------------
-Autumn is a premium, high-fidelity digital watch face featuring a warm, crisp golden-hour fall aesthetic. Experience a living sky, drifting clouds, rolling hills, and a swaying grove of fiery maple trees, all procedurally rendered — with leaves that flutter down out of the canopies and woodland critters that wander through. The sky and sun track your real sunrise and sunset, and two configurable complications keep the data you care about on your wrist. Large, outlined digital time keeps you connected and styled for the season.
+Autumn is a premium digital watch face with a warm, crisp golden-hour fall aesthetic. A living sky, drifting clouds, rolling hills, and a swaying grove of fiery maple trees are all procedurally rendered — with leaves fluttering from the canopies and woodland critters wandering through. The sky and sun track your real sunrise and sunset, and two configurable complications keep the data you care about on your wrist.
 
 FEATURES & DETAILS
 • LIVING SKY ON REAL SUN TIMES: A procedural backdrop that shifts colors dynamically by time of day (dawn purples, crisp midday blue, amber/crimson sunset, and a starry dusky-purple night), anchored to the actual sunrise/sunset for your location and date.
-• ARCING SUN & MOON: Day/night orbital progression of a glowing harvest sun (with rotating rays and bloom) and a pale crescent moon, following the true day arc.
+• ARCING SUN & MOON: A glowing harvest sun (with rotating rays and bloom) and a pale crescent moon rise and set along the true day arc.
 • PROCEDURAL ANIMATIONS: Drifting clouds, gently rolling autumn hills, and a swaying grove of deciduous trees with fiery red/orange/gold canopies.
 • FALLING LEAVES: Maple leaves spill out of each tree's canopy and flutter to the leaf-litter forest floor.
-• WOODLAND CRITTERS: Once in a while a little visitor crosses the scene — a squirrel scampering or a fox trotting along the forest floor, a hedgehog trundling past, a small skein of geese migrating overhead, or, after dark, an owl gliding or a bat fluttering by. Subtle and occasional (at most one at a time, with quiet stretches between), and easily turned off in settings.
-• OPTIONAL HOLIDAY THEMES: Two off-by-default toggles dress the scene for the season. HALLOWEEN adds a glowing carved jack-o'-lantern on the leaf litter and lets a black cat or a ghost join the visitors. THANKSGIVING adds a harvest patch of pumpkins and gourds and lets a fan-tailed turkey strut across. Turn on either, both, or neither.
+• WOODLAND CRITTERS: Once in a while a little visitor crosses the scene — a squirrel, fox, or hedgehog on the forest floor, a skein of geese overhead, or an owl or bat after dark. Subtle and occasional (one at a time, with quiet stretches between), and easily turned off in settings.
+• OPTIONAL HOLIDAY THEMES: Two off-by-default toggles dress the scene for the season — HALLOWEEN adds a glowing jack-o'-lantern plus a black cat and ghost, and THANKSGIVING adds a harvest pumpkin patch plus a strutting turkey.
 • ROTATING SECONDS: A black-outlined maple leaf second indicator orbits the perimeter, drawn on top of everything else so it stays legible over the time, date, and complications.
-• CONFIGURABLE COMPLICATIONS: Choose what each bottom slot shows — Heart Rate, Body Battery, Device Battery, Steps, or Calories (or turn it Off) — each with a matching warm-toned icon. Defaults: bottom-left = Heart Rate, bottom-right = Device Battery. A harvest-gold steps bar with a live count sits below.
-• HIGH-CONTRAST OUTLINES: All texts (clock, date, weather, and complication values) feature a crisp black outline for absolute readability against the dynamic visual backdrops.
+• CONFIGURABLE COMPLICATIONS: Each bottom slot shows Heart Rate, Body Battery, Device Battery, Steps, or Calories (or Off), with a matching warm-toned icon. Defaults: left = Heart Rate, right = Device Battery. A harvest-gold steps bar with a live count sits below.
+• HIGH-CONTRAST OUTLINES: Clock, date, weather, and complication values all get a crisp black outline for readability against the dynamic backdrops.
 
 BUILT FOR YOUR DISPLAY
 Autumn adapts to your panel:
@@ -34,7 +34,7 @@ Autumn adapts to your panel:
 Everything is laid out relative to your screen, so it looks right on every supported case size.
 
 ALWAYS-ON FRIENDLY
-On AMOLED, the always-on display switches to a burn-in-safe variant — dim grey time/date, thin outline representations of the complications, steps progress outline, and no visual fills or background animations. All lit pixels are shifted a few pixels each minute. MIP panels always show the full face.
+On AMOLED, the always-on display switches to a burn-in-safe variant — dim grey time/date, thin complication outlines, and no background animations, with all lit pixels shifted a few pixels each minute. MIP panels always show the full face.
 
 SETTINGS
 • Show Date — toggle the date line.
@@ -49,7 +49,7 @@ PRIVACY
 Autumn uses only the SensorHistory permission to read Body Battery. It does not collect or transmit any data off your watch.
 
 SUPPORTED DEVICES
-Every Connect IQ 4.0+ round Garmin watch — Forerunner (165, 255, 265, 570, 955, 965, 970), fenix 7/8 (incl. Solar) & fenix E, epix 2 / Pro, enduro 3, Venu 2/3 (& Venu 4), Vivoactive 5/6, Instinct 3 / E / Crossover, plus Approach (golf), Descent (dive), D2 (aviation), and MARQ specialty watches. Square/rectangular panels (Venu Sq 2, Venu X1) are not supported.
+Every Connect IQ 4.0+ round Garmin watch — Forerunner, fenix 7/8 (incl. Solar) & fenix E, epix 2 / Pro, enduro 3, Venu 2/3, Vivoactive 5/6, Instinct 3 / E / Crossover, plus Approach, Descent, D2, and MARQ specialty watches. Square/rectangular panels (Venu Sq 2, Venu X1) are not supported.
 
 Equip Autumn, and take a moment in the crisp fall air.
 
